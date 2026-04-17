@@ -1,0 +1,19 @@
+# Rust
+/target/
+Cargo.lock
+**/*.rs.bk
+
+# Fugue runtime
+/functions/
+/.fugue/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
