@@ -21,7 +21,7 @@
           <UFormField label="Subject" name="subject" required>
             <USelect
               v-model="form.subject"
-              :options="subjects"
+              :items="subjects"
               placeholder="Select a subject"
               size="lg"
             />

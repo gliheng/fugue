@@ -18,14 +18,38 @@ pub struct BuildResult {
     pub standalone_path: PathBuf,
 }
 
-/// Detect which package manager to use (npm, pnpm, or yarn)
-fn detect_package_manager(source_dir: &Path) -> &'static str {
-    if source_dir.join("pnpm-lock.yaml").exists() {
-        "pnpm"
-    } else if source_dir.join("yarn.lock").exists() {
-        "yarn"
-    } else {
-        "npm"
+#[derive(Debug, Clone, Copy)]
+pub enum PackageManager {
+    Npm,
+    Yarn,
+    Pnpm,
+}
+
+impl PackageManager {
+    pub fn detect(source_dir: &Path) -> Self {
+        if source_dir.join("pnpm-lock.yaml").exists() {
+            PackageManager::Pnpm
+        } else if source_dir.join("yarn.lock").exists() {
+            PackageManager::Yarn
+        } else {
+            PackageManager::Npm
+        }
+    }
+
+    pub fn install_command(&self) -> Vec<&str> {
+        match self {
+            PackageManager::Npm => vec!["npm", "install"],
+            PackageManager::Yarn => vec!["yarn", "install"],
+            PackageManager::Pnpm => vec!["pnpm", "install"],
+        }
+    }
+
+    pub fn build_command(&self) -> Vec<&str> {
+        match self {
+            PackageManager::Npm => vec!["npm", "run", "build"],
+            PackageManager::Yarn => vec!["yarn", "build"],
+            PackageManager::Pnpm => vec!["pnpm", "build"],
+        }
     }
 }
 
@@ -33,57 +57,37 @@ fn detect_package_manager(source_dir: &Path) -> &'static str {
 pub async fn build_nextjs_project(ctx: &BuildContext) -> Result<BuildResult> {
     let start = Instant::now();
 
-    // Detect package manager
-    let pkg_manager = detect_package_manager(&ctx.source_dir);
+    let pkg_manager = PackageManager::detect(&ctx.source_dir);
 
     // Install dependencies
-    println!("Installing dependencies with {}...", pkg_manager);
-    tracing::info!("Installing dependencies with {}...", pkg_manager);
-    let install_cmd = match pkg_manager {
-        "pnpm" => "pnpm install",
-        "yarn" => "yarn install",
-        _ => "npm install",
-    };
-
-    let install_output = Command::new("sh")
-        .arg("-c")
-        .arg(install_cmd)
+    tracing::info!("Installing dependencies with {:?}...", pkg_manager);
+    let install_cmd = pkg_manager.install_command();
+    let install_status = Command::new(install_cmd[0])
+        .args(&install_cmd[1..])
         .current_dir(&ctx.source_dir)
-        .output()
+        .status()
         .map_err(|e| FugueError::BuildError(format!("Failed to run install: {}", e)))?;
 
-    if !install_output.status.success() {
-        let stderr = String::from_utf8_lossy(&install_output.stderr);
-        return Err(FugueError::BuildError(format!(
-            "Dependency installation failed: {}",
-            stderr
-        )));
+    if !install_status.success() {
+        return Err(FugueError::BuildError(
+            "Dependency installation failed".to_string(),
+        ));
     }
-
-    println!("Dependencies installed successfully");
 
     // Run next build
-    println!("Building Next.js project (this may take a few minutes)...");
     tracing::info!("Building Next.js project...");
-    let build_cmd = match pkg_manager {
-        "pnpm" => "pnpm run build",
-        "yarn" => "yarn build",
-        _ => "npm run build",
-    };
-
-    let build_output = Command::new("sh")
-        .arg("-c")
-        .arg(build_cmd)
+    let build_cmd = pkg_manager.build_command();
+    let build_status = Command::new(build_cmd[0])
+        .args(&build_cmd[1..])
         .current_dir(&ctx.source_dir)
-        .output()
+        .status()
         .map_err(|e| FugueError::BuildError(format!("Failed to run build: {}", e)))?;
 
-    if !build_output.status.success() {
-        let stderr = String::from_utf8_lossy(&build_output.stderr);
-        return Err(FugueError::BuildError(format!("Build failed: {}", stderr)));
+    if !build_status.success() {
+        return Err(FugueError::BuildError("Build failed".to_string()));
     }
 
-    println!("Build completed successfully");
+    tracing::info!("Build completed successfully");
 
     // Verify .next/standalone exists
     let standalone_path = ctx.source_dir.join(".next/standalone");

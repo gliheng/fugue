@@ -121,6 +121,29 @@ impl FunctionRegistry {
         println!("Copying build output...");
         copy_dir_recursive(build_output, &build_dest)?;
 
+        // Copy static assets from .next/static to build/standalone/.next/static
+        // This is required for Next.js standalone to serve CSS/JS files
+        let source_static = build_output.join("static");
+        let standalone_next = build_dest.join("standalone").join(".next");
+        if standalone_next.exists() {
+            let dest_static = standalone_next.join("static");
+            if source_static.exists() {
+                println!("Copying static assets to standalone...");
+                copy_dir_recursive(&source_static, &dest_static)?;
+            }
+        }
+
+        // Copy public directory to standalone/public if it exists
+        let source_public = source_dir.join("public");
+        let standalone_dir = build_dest.join("standalone");
+        if standalone_dir.exists() {
+            let dest_public = standalone_dir.join("public");
+            if source_public.exists() {
+                println!("Copying public directory to standalone...");
+                copy_dir_recursive(&source_public, &dest_public)?;
+            }
+        }
+
         // Create metadata
         let now = Utc::now();
         let metadata = FunctionMetadata {
@@ -299,7 +322,7 @@ impl FunctionRegistry {
 fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
     fs::create_dir_all(dst)?;
 
-    for entry in walkdir::WalkDir::new(src) {
+    for entry in walkdir::WalkDir::new(src).follow_links(true) {
         let entry = entry.map_err(|e| FugueError::Other(format!("Failed to walk directory: {}", e)))?;
         let path = entry.path();
         let relative_path = path.strip_prefix(src).unwrap();
@@ -307,12 +330,13 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
 
         if entry.file_type().is_dir() {
             fs::create_dir_all(&target_path)?;
-        } else {
+        } else if entry.file_type().is_file() {
             if let Some(parent) = target_path.parent() {
                 fs::create_dir_all(parent)?;
             }
             fs::copy(path, &target_path)?;
         }
+        // Skip other file types (symlinks are followed by walkdir)
     }
 
     Ok(())

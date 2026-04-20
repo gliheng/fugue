@@ -303,6 +303,9 @@ async fn delete_handler(
     Path(name): Path<String>,
 ) -> impl IntoResponse {
     let result: Result<_> = async {
+        // Stop the workerd process first to free up the port
+        state.workerd_pool.write().await.stop_process(&name).await?;
+
         state.registry.delete_function(&name)?;
 
         let mut functions = state.functions.write().await;

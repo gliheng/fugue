@@ -201,7 +201,7 @@ pub async fn invoke_command(name: String, data: Option<String>) -> Result<()> {
         return Err(FugueError::DaemonNotRunning);
     }
 
-    // Parse data
+    // Parse data - if no data provided, use empty object
     let input = if let Some(d) = data {
         serde_json::from_str(&d)?
     } else {
