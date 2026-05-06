@@ -117,26 +117,29 @@ async fn invoke_handler(
                     return Err(FugueError::ExecutionError(error_msg));
                 }
 
-                tracing::info!("Spawning Nuxt.js app at: {:?}", output_path);
+                // workerd artifacts directory (generated during deploy)
+                let workerd_func_dir = crate::config::workerd_dir().join(&name);
+
+                tracing::info!("Spawning workerd for Nuxt.js at: {:?}", workerd_func_dir);
 
                 // Get or spawn workerd process for Nuxt.js
                 let mut pool = state.workerd_pool.write().await;
                 let port = match pool
-                    .get_or_spawn_nuxtjs(&name, &output_path, &metadata.environment_vars)
+                    .get_or_spawn_nuxtjs(&name, &workerd_func_dir, &metadata.environment_vars)
                     .await
                 {
                     Ok(p) => {
-                        tracing::info!("Successfully spawned Nuxt.js on port: {}", p);
+                        tracing::info!("Successfully spawned workerd on port: {}", p);
                         p
                     }
                     Err(e) => {
-                        tracing::error!("Failed to spawn Nuxt.js: {:?}", e);
+                        tracing::error!("Failed to spawn workerd: {:?}", e);
                         return Err(e);
                     }
                 };
                 drop(pool);
 
-                tracing::info!("Nuxt.js app running on port: {}", port);
+                tracing::info!("workerd running on port: {}", port);
 
                 // Forward HTTP request to Nuxt.js app
                 let client = reqwest::Client::builder()

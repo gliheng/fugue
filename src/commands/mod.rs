@@ -136,8 +136,18 @@ pub async fn deploy_command(
             // Validate build output
             crate::nuxtjs::validate_build_output(path_obj)?;
 
-            // Deploy via registry
+            // Generate workerd artifacts (bundle, static assets, capnp config)
             let output_dir = path_obj.join(".output");
+            println!("Generating workerd artifacts...");
+            let workerd_dir = crate::config::workerd_dir();
+            let workerd_func_dir = crate::runtime::generate_nuxtjs_workerd_artifacts(
+                &name,
+                &output_dir,
+                &workerd_dir,
+            )?;
+            println!("workerd artifacts ready at {:?}", workerd_func_dir);
+
+            // Deploy via registry
             let registry = crate::registry::FunctionRegistry::new(crate::config::functions_dir())?;
             let _metadata = registry.deploy_nuxtjs_function(
                 &name,
