@@ -1,11 +1,16 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  compatibilityDate: '2024-01-01',
-  devtools: { enabled: false },
-  modules: ['@nuxt/ui'],
+  compatibilityDate: '2025-07-15',
+  devtools: { enabled: true },
+  modules: ['@nuxt/ui', 'nitro-cloudflare-dev'],
   css: ['~/assets/style.css'],
   nitro: {
-    preset: 'node-server'
+    preset: "cloudflare_module",
+
+    cloudflare: {
+      deployConfig: true,
+      nodeCompat: true
+    }
   },
   fonts: {
     provider: 'bunny'

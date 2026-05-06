@@ -12,14 +12,16 @@
   },
   "dependencies": {
     "@nuxt/ui": "^4.6.1",
-    "nuxt": "^4.4.2",
+    "nuxt": "^4.4.4",
     "tailwindcss": "^4.2.2",
     "vue": "latest"
   },
+  "devDependencies": {
+    "@iconify-json/heroicons": "^1.2.3",
+    "nitro-cloudflare-dev": "^0.2.2",
+    "nitropack": "^2.13.4"
+  },
   "engines": {
     "node": ">=18"
-  },
-  "devDependencies": {
-    "@iconify-json/heroicons": "^1.2.3"
   }
 }
