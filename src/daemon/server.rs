@@ -189,6 +189,81 @@ async fn invoke_handler(
 
                 Ok(Json(InvokeResponse { result }))
             }
+            DeploymentType::ReactRouter { ref build_output_path, .. } => {
+                let function_dir = crate::config::functions_dir().join(&name);
+                let output_path = function_dir.join(build_output_path);
+
+                if !output_path.exists() {
+                    let error_msg = format!(
+                        "Output directory not found at {:?}. The React Router app may not have been built correctly",
+                        output_path
+                    );
+                    tracing::error!("{}", error_msg);
+                    return Err(FugueError::ExecutionError(error_msg));
+                }
+
+                let workerd_func_dir = crate::config::workerd_dir().join(&name);
+
+                tracing::info!("Spawning workerd for React Router at: {:?}", workerd_func_dir);
+
+                let mut pool = state.workerd_pool.write().await;
+                let port = match pool
+                    .get_or_spawn_reactrouter(&name, &workerd_func_dir, &metadata.environment_vars)
+                    .await
+                {
+                    Ok(p) => {
+                        tracing::info!("Successfully spawned workerd on port: {}", p);
+                        p
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to spawn workerd: {:?}", e);
+                        return Err(e);
+                    }
+                };
+                drop(pool);
+
+                tracing::info!("workerd running on port: {}", port);
+
+                let client = reqwest::Client::builder()
+                    .no_proxy()
+                    .build()
+                    .map_err(|e| FugueError::Other(format!("Failed to build client: {}", e)))?;
+
+                let response = client
+                    .get(&format!("http://127.0.0.1:{}/", port))
+                    .send()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Request to React Router failed: {}", e);
+                        FugueError::ExecutionError(format!("React Router request failed: {}", e))
+                    })?;
+
+                let content_type = response
+                    .headers()
+                    .get("content-type")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_string();
+
+                let result = if content_type.contains("application/json") {
+                    response
+                        .json::<serde_json::Value>()
+                        .await
+                        .map_err(|e| FugueError::ExecutionError(format!("Failed to parse JSON: {}", e)))?
+                } else {
+                    let text = response
+                        .text()
+                        .await
+                        .map_err(|e| FugueError::ExecutionError(format!("Failed to read response: {}", e)))?;
+                    serde_json::json!({
+                        "content_type": content_type,
+                        "body": text,
+                        "url": format!("http://127.0.0.1:{}/", port)
+                    })
+                };
+
+                Ok(Json(InvokeResponse { result }))
+            }
         }
     }
     .await;

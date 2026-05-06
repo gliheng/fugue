@@ -10,6 +10,10 @@ pub enum DeploymentType {
         build_output_path: String,
         node_version: String,
     },
+    ReactRouter {
+        build_output_path: String,
+        node_version: String,
+    },
 }
 
 impl Default for DeploymentType {

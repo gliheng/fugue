@@ -35,11 +35,13 @@ Stage 3 adds Nuxt.js support to the Fugue FAAS platform, following the same arch
 - Added `NotNuxtJsProject` error
 - Added `UnsupportedNuxtJsVersion` error
 
-### 3. Runtime Integration (`src/runtime/workerd.rs`)
+### 3. Runtime Integration (`src/runtime/workerd.rs`) *(updated in Stage 4)*
 
-**New Methods:**
+**Original Methods (Stage 3):**
 - `get_or_spawn_nuxtjs()`: Manages Nuxt.js process lifecycle
 - `spawn_workerd_nuxtjs()`: Spawns Node.js process with Nitro server
+
+**Stage 4 Update:** These methods now spawn real `workerd` instead of Node.js. The deploy step generates workerd artifacts (bundle, static assets, capnp config) via `generate_nuxtjs_workerd_artifacts()`. See `004_STAGE_4_WORKERD_NUXT.md`.
 
 **Key Implementation Details:**
 - Entry point: `index.mjs` (Nitro server)
@@ -102,10 +104,11 @@ functions/{name}/
 - **Rationale**: Better UX, consistent with Next.js pattern
 - **Impact**: No separate `deploy-nuxt` command needed
 
-### 3. Node.js Runtime
+### 3. Node.js Runtime *(superseded by Stage 4)*
 - **Decision**: Run Nuxt via Node.js, not workerd
 - **Rationale**: Nitro server uses ESM modules, Node.js handles this natively
 - **Impact**: Same pattern as Next.js, proven approach
+- **Superseded**: Stage 4 replaced Node.js with real workerd via esbuild bundling and 3-service Cap'n Proto config. See `004_STAGE_4_WORKERD_NUXT.md`.
 
 ### 4. Nitro Server
 - **Decision**: Use Nitro's default Node.js server preset
@@ -160,7 +163,7 @@ cd ../..
 ## Future Enhancements
 
 1. **API Routes**: Test and document Nuxt server API routes
-2. **Static Assets**: Verify `.output/public/` static asset handling
+2. **Static Assets** *(done in Stage 4)*: Static asset handling via embedded base64 map
 3. **Environment Variables**: Add Nuxt-specific env var validation
 4. **Build Optimization**: Add caching for faster rebuilds
 5. **Monitoring**: Add Nitro-specific health checks

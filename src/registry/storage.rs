@@ -52,8 +52,8 @@ impl FunctionRegistry {
                 let code_path = function_dir.join("code.js");
                 fs::read_to_string(code_path)?
             }
-            DeploymentType::NuxtJs { .. } => {
-                // Nuxt.js functions don't have a code.js file
+            DeploymentType::NuxtJs { .. } | DeploymentType::ReactRouter { .. } => {
+                // Framework functions don't have a code.js file
                 String::new()
             }
         };
@@ -185,6 +185,54 @@ impl FunctionRegistry {
         fs::write(metadata_path, serde_json::to_string_pretty(&metadata)?)?;
 
         println!("Rebuild complete!");
+
+        Ok(metadata)
+    }
+
+    pub fn deploy_reactrouter_function(
+        &self,
+        name: &str,
+        source_dir: &Path,
+        build_output: &Path,
+        env_vars: HashMap<String, String>,
+        node_version: String,
+    ) -> Result<FunctionMetadata> {
+        let function_dir = self.functions_dir.join(name);
+
+        // Create directory structure
+        fs::create_dir_all(&function_dir)?;
+        let source_dest = function_dir.join("source");
+        let build_dest = function_dir.join("build");
+
+        // Copy source directory
+        println!("Copying source files...");
+        copy_dir_recursive(source_dir, &source_dest)?;
+
+        // Copy build output (build/ directory)
+        println!("Copying build output...");
+        copy_dir_recursive(build_output, &build_dest)?;
+
+        // Create metadata
+        let now = Utc::now();
+        let metadata = FunctionMetadata {
+            id: Uuid::new_v4(),
+            name: name.to_string(),
+            created_at: now,
+            updated_at: now,
+            timeout_ms: crate::config::DEFAULT_TIMEOUT_MS,
+            handler: "default".to_string(),
+            deployment_type: DeploymentType::ReactRouter {
+                build_output_path: "build/server".to_string(),
+                node_version,
+            },
+            environment_vars: env_vars,
+        };
+
+        // Save metadata
+        let metadata_path = function_dir.join("metadata.json");
+        fs::write(metadata_path, serde_json::to_string_pretty(&metadata)?)?;
+
+        println!("Deployment complete!");
 
         Ok(metadata)
     }

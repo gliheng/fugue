@@ -159,9 +159,65 @@ pub async fn deploy_command(
 
             println!("✓ Nuxt.js app '{}' deployed successfully", name);
         } else {
-            return Err(FugueError::ValidationError(
-                "Directory is not a Nuxt.js project. Use a single .js file for simple functions.".to_string(),
-            ));
+            // Check if it's a React Router project
+            let reactrouter_project = crate::reactrouter::detect_reactrouter_project(path_obj).ok();
+
+            if let Some(project) = reactrouter_project {
+                // React Router deployment
+                let mut env_vars = HashMap::new();
+                for env_str in env {
+                    let parts: Vec<&str> = env_str.splitn(2, '=').collect();
+                    if parts.len() != 2 {
+                        return Err(FugueError::ValidationError(format!(
+                            "Invalid environment variable format: {}. Expected KEY=VALUE",
+                            env_str
+                        )));
+                    }
+                    env_vars.insert(parts[0].to_string(), parts[1].to_string());
+                }
+
+                println!("Deploying React Router app '{}'...", name);
+                if skip_build {
+                    println!("Skipping build (using existing build directory)");
+                }
+
+                // Build if not skipping
+                if !skip_build {
+                    println!("Building React Router project...");
+                    let build_result = crate::reactrouter::build_reactrouter_project(path_obj, false)?;
+                    println!("Build completed in {}ms", build_result.build_time_ms);
+                }
+
+                // Validate build output
+                crate::reactrouter::validate_build_output(path_obj)?;
+
+                // Generate workerd artifacts (bundle, static assets, capnp config)
+                let output_dir = path_obj.join("build");
+                println!("Generating workerd artifacts...");
+                let workerd_dir = crate::config::workerd_dir();
+                let workerd_func_dir = crate::runtime::generate_reactrouter_workerd_artifacts(
+                    &name,
+                    &output_dir,
+                    &workerd_dir,
+                )?;
+                println!("workerd artifacts ready at {:?}", workerd_func_dir);
+
+                // Deploy via registry
+                let registry = crate::registry::FunctionRegistry::new(crate::config::functions_dir())?;
+                let _metadata = registry.deploy_reactrouter_function(
+                    &name,
+                    path_obj,
+                    &output_dir,
+                    env_vars,
+                    project.node_version,
+                )?;
+
+                println!("✓ React Router app '{}' deployed successfully", name);
+            } else {
+                return Err(FugueError::ValidationError(
+                    "Directory is not a Nuxt.js or React Router project. Use a single .js file for simple functions.".to_string(),
+                ));
+            }
         }
     } else {
         return Err(FugueError::ValidationError(format!(

@@ -19,19 +19,19 @@ pub enum Commands {
     /// Check daemon status
     Status,
 
-    /// Deploy a function or Nuxt.js application
+    /// Deploy a function, Nuxt.js, or React Router application
     Deploy {
         /// Function name
         name: String,
 
-        /// Path to JavaScript file or Nuxt.js project directory
+        /// Path to JavaScript file or project directory (Nuxt.js, React Router)
         path: String,
 
-        /// Skip build for Nuxt.js projects (use existing .output directory)
+        /// Skip build for framework projects (use existing build directory)
         #[arg(long)]
         skip_build: bool,
 
-        /// Environment variables for Nuxt.js projects (KEY=VALUE format)
+        /// Environment variables for framework projects (KEY=VALUE format)
         #[arg(short, long)]
         env: Vec<String>,
     },

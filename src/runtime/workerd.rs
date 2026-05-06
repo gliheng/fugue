@@ -216,6 +216,40 @@ const mainWorker :Workerd.Worker = (
 
         Ok(child)
     }
+    pub async fn get_or_spawn_reactrouter(
+        &mut self,
+        function_name: &str,
+        workerd_func_dir: &Path,
+        env_vars: &HashMap<String, String>,
+    ) -> Result<u16> {
+        // Check if process already exists
+        if let Some(process) = self.processes.get(function_name) {
+            return Ok(process.port);
+        }
+
+        // Get available port
+        let port = self
+            .available_ports
+            .pop()
+            .ok_or_else(|| FugueError::WorkerdError("No available ports".to_string()))?;
+
+        // Spawn workerd process for React Router (same as NuxtJs)
+        let process = self
+            .spawn_workerd_nuxtjs(function_name, workerd_func_dir, env_vars, port)
+            .await?;
+
+        self.processes.insert(
+            function_name.to_string(),
+            WorkerdProcess {
+                pid: process.id(),
+                port,
+                function_name: function_name.to_string(),
+                process,
+            },
+        );
+
+        Ok(port)
+    }
 }
 
 fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<()> {
@@ -483,6 +517,179 @@ export default {
 }
 
 fn generate_nuxtjs_capnp_config(workerd_func_dir: &Path) -> Result<()> {
+    let config = r#"using Workerd = import "/workerd/workerd.capnp";
+
+const config :Workerd.Config = (
+  services = [
+    (name = "main", worker = .entryWorker),
+    (name = "ssr", worker = .ssrWorker),
+    (name = "static", worker = .staticWorker),
+  ],
+  sockets = [
+    ( name = "http",
+      address = "*:8787",
+      http = (),
+      service = "main"
+    ),
+  ],
+);
+
+const entryWorker :Workerd.Worker = (
+  modules = [
+    (name = "entry.mjs", esModule = embed "entry.mjs"),
+    (name = "static-assets.mjs", esModule = embed "static-assets.mjs"),
+  ],
+  compatibilityDate = "2026-04-21",
+  compatibilityFlags = ["nodejs_compat"],
+  bindings = [
+    (name = "SSR", service = "ssr"),
+    (name = "STATIC", service = "static"),
+  ],
+);
+
+const ssrWorker :Workerd.Worker = (
+  modules = [
+    (name = "bundle.mjs", esModule = embed "bundle.mjs"),
+  ],
+  compatibilityDate = "2026-04-21",
+  compatibilityFlags = ["nodejs_compat"],
+  bindings = [
+    (name = "ASSETS", service = "static"),
+  ],
+);
+
+const staticWorker :Workerd.Worker = (
+  modules = [
+    (name = "static-assets.mjs", esModule = embed "static-assets.mjs"),
+  ],
+  compatibilityDate = "2026-04-21",
+);
+"#;
+    let config_path = workerd_func_dir.join("config.capnp");
+    std::fs::write(&config_path, config)?;
+    Ok(())
+}
+
+/// Generate workerd artifacts for a React Router deployment (standalone, no WorkerdPool needed).
+///
+/// This creates:
+/// - static-assets.mjs: all client files base64-encoded in a JS module
+/// - entry.mjs: router that serves static assets or delegates to SSR
+/// - bundle.mjs: the server bundled into a single ES module (via esbuild)
+/// - config.capnp: workerd configuration with 3 services (entry, SSR, static)
+pub fn generate_reactrouter_workerd_artifacts(
+    function_name: &str,
+    build_output_dir: &Path,
+    workerd_dir: &Path,
+) -> Result<PathBuf> {
+    let server_dir = build_output_dir.join("server");
+    let client_dir = build_output_dir.join("client");
+
+    if !server_dir.join("index.js").exists() {
+        return Err(FugueError::BuildError(
+            "build/server/index.js not found".to_string(),
+        ));
+    }
+
+    // Create workerd artifacts directory
+    let workerd_func_dir = workerd_dir.join(function_name);
+    std::fs::create_dir_all(&workerd_func_dir)?;
+
+    // Step 1: Embed static assets from build/client/
+    tracing::info!("Embedding static assets for '{}'...", function_name);
+    let assets_count = embed_static_assets(&client_dir, &workerd_func_dir)?;
+    tracing::info!("Embedded {} static assets", assets_count);
+
+    // Step 2: Bundle server with esbuild
+    tracing::info!("Bundling server with esbuild for '{}'...", function_name);
+    bundle_reactrouter_server_with_esbuild(&server_dir, &workerd_func_dir)?;
+
+    // Step 3: Generate entry.mjs (router)
+    tracing::info!("Generating entry worker for '{}'...", function_name);
+    generate_reactrouter_entry_worker(&workerd_func_dir)?;
+
+    // Step 4: Generate config.capnp
+    tracing::info!("Generating workerd config for '{}'...", function_name);
+    generate_reactrouter_capnp_config(&workerd_func_dir)?;
+
+    tracing::info!(
+        "workerd artifacts generated for '{}' at {:?}",
+        function_name,
+        workerd_func_dir
+    );
+
+    Ok(workerd_func_dir)
+}
+
+fn bundle_reactrouter_server_with_esbuild(server_dir: &Path, workerd_func_dir: &Path) -> Result<()> {
+    let index_js = server_dir.join("index.js");
+    let bundle_out = workerd_func_dir.join("bundle.mjs");
+
+    let esbuild_bin = find_esbuild()?;
+
+    let mut cmd = if esbuild_bin.file_name().map(|f| f == "npx").unwrap_or(false) {
+        let mut c = std::process::Command::new(&esbuild_bin);
+        c.arg("esbuild");
+        c
+    } else {
+        std::process::Command::new(&esbuild_bin)
+    };
+
+    let output = cmd
+        .arg(&index_js)
+        .arg("--bundle")
+        .arg("--format=esm")
+        .arg(format!("--outfile={}", bundle_out.display()))
+        .arg("--external:node:*")
+        .arg("--external:cloudflare:workers")
+        .arg("--conditions=workerd")
+        .arg("--platform=node")
+        .output()
+        .map_err(|e| FugueError::BuildError(format!("Failed to run esbuild: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(FugueError::BuildError(format!("esbuild failed: {}", stderr)));
+    }
+
+    tracing::info!("Bundle written to {:?}", bundle_out);
+    Ok(())
+}
+
+fn generate_reactrouter_entry_worker(workerd_func_dir: &Path) -> Result<()> {
+    let entry_code = r#"// Auto-generated by fugue — do not edit
+import assets from "static-assets.mjs";
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const pathname = url.pathname;
+
+    // Serve static assets
+    const asset = assets.get(pathname);
+    if (asset) {
+      return new Response(
+        Uint8Array.from(atob(asset.data), c => c.charCodeAt(0)),
+        {
+          headers: {
+            "Content-Type": asset.mime,
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        }
+      );
+    }
+
+    // Delegate to SSR handler via service binding
+    return env.SSR.fetch(request);
+  },
+};
+"#;
+    let entry_path = workerd_func_dir.join("entry.mjs");
+    std::fs::write(&entry_path, entry_code)?;
+    Ok(())
+}
+
+fn generate_reactrouter_capnp_config(workerd_func_dir: &Path) -> Result<()> {
     let config = r#"using Workerd = import "/workerd/workerd.capnp";
 
 const config :Workerd.Config = (

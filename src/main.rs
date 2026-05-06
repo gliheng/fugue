@@ -5,6 +5,7 @@ mod config;
 mod daemon;
 mod error;
 mod nuxtjs;
+mod reactrouter;
 mod registry;
 mod runtime;
 mod validation;
