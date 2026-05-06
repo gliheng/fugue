@@ -34,16 +34,6 @@ fugue start
 fugue deploy hello examples/hello.js
 ```
 
-### Deploy a Next.js application
-```bash
-fugue deploy-nextjs my-app ./examples/nextjs-app --env API_KEY=secret
-```
-
-### Rebuild a Next.js application
-```bash
-fugue rebuild my-app
-```
-
 ### Invoke a function
 ```bash
 fugue invoke hello --data '{"name":"World"}'
@@ -96,18 +86,6 @@ export default {
 }
 ```
 
-### Next.js Applications
-
-Next.js projects must be configured with standalone output in `next.config.js`:
-
-```javascript
-module.exports = {
-  output: 'standalone',
-}
-```
-
-See `examples/nextjs-app/` for a complete example.
-
 ## Project Status
 
 **Phase 1 (Complete)**: Basic infrastructure
@@ -118,14 +96,6 @@ See `examples/nextjs-app/` for a complete example.
 - ✅ Daemon server
 - ✅ workerd integration
 - ✅ Single-file function deployment
-
-**Phase 2 (Complete)**: Next.js support
-- ✅ Next.js project detection and validation
-- ✅ Build integration (npm/pnpm/yarn)
-- ✅ Standalone output deployment
-- ✅ Node.js compatibility mode in workerd
-- ✅ Environment variable support
-- ✅ Rebuild functionality
 
 **Future Enhancements**:
 - Logs collection and viewing

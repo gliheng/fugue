@@ -19,45 +19,21 @@ pub enum Commands {
     /// Check daemon status
     Status,
 
-    /// Deploy a function or Next.js application
+    /// Deploy a function or Nuxt.js application
     Deploy {
         /// Function name
         name: String,
 
-        /// Path to JavaScript file or Next.js project directory
+        /// Path to JavaScript file or Nuxt.js project directory
         path: String,
 
-        /// Skip build for Next.js projects (use existing .next directory)
+        /// Skip build for Nuxt.js projects (use existing .output directory)
         #[arg(long)]
         skip_build: bool,
 
-        /// Environment variables for Next.js projects (KEY=VALUE format)
+        /// Environment variables for Nuxt.js projects (KEY=VALUE format)
         #[arg(short, long)]
         env: Vec<String>,
-    },
-
-    /// Deploy a Next.js application (deprecated: use 'deploy' instead)
-    #[command(hide = true)]
-    DeployNextjs {
-        /// Function name
-        name: String,
-
-        /// Path to Next.js project directory
-        directory: String,
-
-        /// Skip build and use existing .next directory
-        #[arg(long)]
-        skip_build: bool,
-
-        /// Environment variables (KEY=VALUE format)
-        #[arg(short, long)]
-        env: Vec<String>,
-    },
-
-    /// Rebuild a deployed Next.js application
-    Rebuild {
-        /// Function name
-        name: String,
     },
 
     /// Get the URL of a deployed function

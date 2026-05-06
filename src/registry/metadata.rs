@@ -6,10 +6,6 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DeploymentType {
     SingleFile,
-    NextJs {
-        build_output_path: String,
-        node_version: String,
-    },
     NuxtJs {
         build_output_path: String,
         node_version: String,

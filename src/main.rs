@@ -4,7 +4,6 @@ mod commands;
 mod config;
 mod daemon;
 mod error;
-mod nextjs;
 mod nuxtjs;
 mod registry;
 mod runtime;
@@ -35,11 +34,6 @@ async fn main() {
         Commands::Deploy { name, path, skip_build, env } => {
             commands::deploy_command(name, path, skip_build, env).await
         }
-        Commands::DeployNextjs { name, directory, skip_build, env } => {
-            // Redirect to unified deploy command
-            commands::deploy_command(name, directory, skip_build, env).await
-        }
-        Commands::Rebuild { name } => commands::rebuild_command(name).await,
         Commands::Url { name } => commands::url_command(name).await,
         Commands::Invoke { name, data } => commands::invoke_command(name, data).await,
         Commands::List => commands::list_command().await,

@@ -94,7 +94,7 @@ pub async fn deploy_command(
         // Single-file deployment
         if skip_build || !env.is_empty() {
             return Err(FugueError::ValidationError(
-                "Options --skip-build and --env are only valid for Next.js projects".to_string(),
+                "Options --skip-build and --env are only valid for Nuxt.js projects".to_string(),
             ));
         }
 
@@ -103,40 +103,10 @@ pub async fn deploy_command(
         client.deploy(&name, &code).await?;
         println!("✓ Function '{}' deployed successfully", name);
     } else if path_obj.is_dir() {
-        // Check if it's a Next.js project
-        let nextjs_project = crate::nextjs::detect_nextjs_project(path_obj)?;
-
         // Check if it's a Nuxt.js project
         let nuxtjs_project = crate::nuxtjs::detect_nuxt_project(path_obj).ok();
 
-        if let Some(project) = nextjs_project {
-            // Next.js deployment
-            crate::nextjs::validate_nextjs_project(&project)?;
-
-            // Parse environment variables
-            let mut env_vars = HashMap::new();
-            for env_str in env {
-                let parts: Vec<&str> = env_str.splitn(2, '=').collect();
-                if parts.len() != 2 {
-                    return Err(FugueError::ValidationError(format!(
-                        "Invalid environment variable format: {}. Expected KEY=VALUE",
-                        env_str
-                    )));
-                }
-                env_vars.insert(parts[0].to_string(), parts[1].to_string());
-            }
-
-            println!("Deploying Next.js app '{}'...", name);
-            if skip_build {
-                println!("Skipping build (using existing .next directory)");
-            }
-
-            client
-                .deploy_nextjs(&name, &path, skip_build, env_vars)
-                .await?;
-
-            println!("✓ Next.js app '{}' deployed successfully", name);
-        } else if let Some(project) = nuxtjs_project {
+        if let Some(project) = nuxtjs_project {
             // Nuxt.js deployment
             // Parse environment variables
             let mut env_vars = HashMap::new();
@@ -180,7 +150,7 @@ pub async fn deploy_command(
             println!("✓ Nuxt.js app '{}' deployed successfully", name);
         } else {
             return Err(FugueError::ValidationError(
-                "Directory is not a Next.js or Nuxt.js project. Use a single .js file for simple functions.".to_string(),
+                "Directory is not a Nuxt.js project. Use a single .js file for simple functions.".to_string(),
             ));
         }
     } else {
@@ -263,80 +233,6 @@ pub async fn delete_command(name: String) -> Result<()> {
 pub async fn logs_command(name: String) -> Result<()> {
     println!("Logs for function '{}':", name);
     println!("Note: Logs not yet implemented");
-    Ok(())
-}
-
-pub async fn deploy_nextjs_command(
-    name: String,
-    directory: String,
-    skip_build: bool,
-    env: Vec<String>,
-) -> Result<()> {
-    let client = DaemonClient::new();
-
-    // Check daemon is running
-    if !crate::daemon::is_daemon_running()? {
-        return Err(FugueError::DaemonNotRunning);
-    }
-
-    // Validate function name
-    crate::validation::validate_function_name(&name)?;
-
-    // Validate directory exists
-    let dir_path = Path::new(&directory);
-    if !dir_path.exists() {
-        return Err(FugueError::ValidationError(format!(
-            "Directory not found: {}",
-            directory
-        )));
-    }
-
-    // Detect Next.js project
-    let project = crate::nextjs::detect_nextjs_project(dir_path)?
-        .ok_or_else(|| FugueError::NotNextJsProject("Not a Next.js project".to_string()))?;
-
-    // Validate project
-    crate::nextjs::validate_nextjs_project(&project)?;
-
-    // Parse environment variables
-    let mut env_vars = HashMap::new();
-    for env_str in env {
-        let parts: Vec<&str> = env_str.splitn(2, '=').collect();
-        if parts.len() != 2 {
-            return Err(FugueError::ValidationError(format!(
-                "Invalid environment variable format: {}. Expected KEY=VALUE",
-                env_str
-            )));
-        }
-        env_vars.insert(parts[0].to_string(), parts[1].to_string());
-    }
-
-    println!("Deploying Next.js app '{}'...", name);
-    if skip_build {
-        println!("Skipping build (using existing .next directory)");
-    }
-
-    client
-        .deploy_nextjs(&name, &directory, skip_build, env_vars)
-        .await?;
-
-    println!("✓ Next.js app '{}' deployed successfully", name);
-    Ok(())
-}
-
-pub async fn rebuild_command(name: String) -> Result<()> {
-    let client = DaemonClient::new();
-
-    // Check daemon is running
-    if !crate::daemon::is_daemon_running()? {
-        return Err(FugueError::DaemonNotRunning);
-    }
-
-    println!("Rebuilding Next.js app '{}'...", name);
-
-    client.rebuild(&name).await?;
-
-    println!("✓ Next.js app '{}' rebuilt successfully", name);
     Ok(())
 }
 

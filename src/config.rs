@@ -9,7 +9,7 @@ pub const WORKERD_PORT_END: u16 = 8180;
 pub const DEFAULT_TIMEOUT_MS: u64 = 5000;
 pub const MAX_FUNCTION_SIZE: usize = 1024 * 1024; // 1MB
 
-// Next.js specific constants
+// Framework build constants (used by Nuxt.js)
 pub const MAX_BUILD_TIME_MS: u64 = 300_000; // 5 minutes
 pub const MAX_PROJECT_SIZE: usize = 100 * 1024 * 1024; // 100MB
 pub const SUPPORTED_NODE_VERSIONS: &[&str] = &["18", "20"];

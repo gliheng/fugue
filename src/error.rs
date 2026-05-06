@@ -26,12 +26,6 @@ pub enum FugueError {
     #[error("Build error: {0}")]
     BuildError(String),
 
-    #[error("Not a Next.js project: {0}")]
-    NotNextJsProject(String),
-
-    #[error("Next.js version not supported: {0}")]
-    UnsupportedNextJsVersion(String),
-
     #[error("Not a Nuxt.js project: {0}")]
     NotNuxtJsProject(String),
 

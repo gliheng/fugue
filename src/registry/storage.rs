@@ -52,10 +52,6 @@ impl FunctionRegistry {
                 let code_path = function_dir.join("code.js");
                 fs::read_to_string(code_path)?
             }
-            DeploymentType::NextJs { .. } => {
-                // Next.js functions don't have a code.js file
-                String::new()
-            }
             DeploymentType::NuxtJs { .. } => {
                 // Nuxt.js functions don't have a code.js file
                 String::new()
@@ -96,77 +92,6 @@ impl FunctionRegistry {
 
         fs::remove_dir_all(function_dir)?;
         Ok(())
-    }
-
-    pub fn deploy_nextjs_function(
-        &self,
-        name: &str,
-        source_dir: &Path,
-        build_output: &Path,
-        env_vars: HashMap<String, String>,
-        node_version: String,
-    ) -> Result<FunctionMetadata> {
-        let function_dir = self.functions_dir.join(name);
-
-        // Create directory structure
-        fs::create_dir_all(&function_dir)?;
-        let source_dest = function_dir.join("source");
-        let build_dest = function_dir.join("build");
-
-        // Copy source directory
-        println!("Copying source files...");
-        copy_dir_recursive(source_dir, &source_dest)?;
-
-        // Copy build output (.next directory contains standalone)
-        println!("Copying build output...");
-        copy_dir_recursive(build_output, &build_dest)?;
-
-        // Copy static assets from .next/static to build/standalone/.next/static
-        // This is required for Next.js standalone to serve CSS/JS files
-        let source_static = build_output.join("static");
-        let standalone_next = build_dest.join("standalone").join(".next");
-        if standalone_next.exists() {
-            let dest_static = standalone_next.join("static");
-            if source_static.exists() {
-                println!("Copying static assets to standalone...");
-                copy_dir_recursive(&source_static, &dest_static)?;
-            }
-        }
-
-        // Copy public directory to standalone/public if it exists
-        let source_public = source_dir.join("public");
-        let standalone_dir = build_dest.join("standalone");
-        if standalone_dir.exists() {
-            let dest_public = standalone_dir.join("public");
-            if source_public.exists() {
-                println!("Copying public directory to standalone...");
-                copy_dir_recursive(&source_public, &dest_public)?;
-            }
-        }
-
-        // Create metadata
-        let now = Utc::now();
-        let metadata = FunctionMetadata {
-            id: Uuid::new_v4(),
-            name: name.to_string(),
-            created_at: now,
-            updated_at: now,
-            timeout_ms: crate::config::DEFAULT_TIMEOUT_MS,
-            handler: "default".to_string(),
-            deployment_type: DeploymentType::NextJs {
-                build_output_path: "build/standalone".to_string(),
-                node_version,
-            },
-            environment_vars: env_vars,
-        };
-
-        // Save metadata
-        let metadata_path = function_dir.join("metadata.json");
-        fs::write(metadata_path, serde_json::to_string_pretty(&metadata)?)?;
-
-        println!("Deployment complete!");
-
-        Ok(metadata)
     }
 
     pub fn deploy_nuxtjs_function(
@@ -213,59 +138,6 @@ impl FunctionRegistry {
         fs::write(metadata_path, serde_json::to_string_pretty(&metadata)?)?;
 
         println!("Deployment complete!");
-
-        Ok(metadata)
-    }
-
-    pub fn rebuild_nextjs_function(&self, name: &str) -> Result<FunctionMetadata> {
-        let function_dir = self.functions_dir.join(name);
-
-        if !function_dir.exists() {
-            return Err(FugueError::FunctionNotFound(name.to_string()));
-        }
-
-        // Load existing metadata
-        let metadata_path = function_dir.join("metadata.json");
-        let metadata_json = fs::read_to_string(&metadata_path)?;
-        let mut metadata: FunctionMetadata = serde_json::from_str(&metadata_json)?;
-
-        // Verify it's a Next.js deployment
-        if !matches!(metadata.deployment_type, DeploymentType::NextJs { .. }) {
-            return Err(FugueError::ValidationError(
-                "Function is not a Next.js deployment".to_string(),
-            ));
-        }
-
-        // Source directory should exist
-        let source_dir = function_dir.join("source");
-        if !source_dir.exists() {
-            return Err(FugueError::Other(
-                "Source directory not found for rebuild".to_string(),
-            ));
-        }
-
-        // Build the project
-        let build_ctx = crate::nextjs::BuildContext {
-            source_dir: source_dir.clone(),
-            build_dir: function_dir.join("build"),
-            function_name: name.to_string(),
-        };
-
-        let build_result = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current()
-                .block_on(crate::nextjs::build_nextjs_project(&build_ctx))
-        })?;
-
-        // Copy new build output
-        let build_dest = function_dir.join("build");
-        if build_dest.exists() {
-            fs::remove_dir_all(&build_dest)?;
-        }
-        copy_dir_recursive(&source_dir.join(".next"), &build_dest.join(".next"))?;
-
-        // Update metadata timestamp
-        metadata.updated_at = Utc::now();
-        fs::write(metadata_path, serde_json::to_string_pretty(&metadata)?)?;
 
         Ok(metadata)
     }

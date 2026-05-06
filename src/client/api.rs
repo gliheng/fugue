@@ -1,24 +1,10 @@
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DeployRequest {
     pub name: String,
     pub code: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DeployNextJsRequest {
-    pub name: String,
-    pub source_dir: String,
-    pub skip_build: bool,
-    pub env_vars: HashMap<String, String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RebuildRequest {
-    pub name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -122,45 +108,6 @@ impl DaemonClient {
     pub async fn shutdown(&self) -> Result<()> {
         self.client
             .post(&format!("{}/api/shutdown", self.base_url))
-            .send()
-            .await?
-            .error_for_status()?;
-
-        Ok(())
-    }
-
-    pub async fn deploy_nextjs(
-        &self,
-        name: &str,
-        source_dir: &str,
-        skip_build: bool,
-        env_vars: HashMap<String, String>,
-    ) -> Result<()> {
-        let request = DeployNextJsRequest {
-            name: name.to_string(),
-            source_dir: source_dir.to_string(),
-            skip_build,
-            env_vars,
-        };
-
-        self.client
-            .post(&format!("{}/api/deploy-nextjs", self.base_url))
-            .json(&request)
-            .send()
-            .await?
-            .error_for_status()?;
-
-        Ok(())
-    }
-
-    pub async fn rebuild(&self, name: &str) -> Result<()> {
-        let request = RebuildRequest {
-            name: name.to_string(),
-        };
-
-        self.client
-            .post(&format!("{}/api/rebuild/{}", self.base_url, name))
-            .json(&request)
             .send()
             .await?
             .error_for_status()?;
