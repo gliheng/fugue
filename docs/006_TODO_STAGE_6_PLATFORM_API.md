@@ -8,7 +8,7 @@ Stage 6 transforms Fugue from a CLI-only tool into a production web platform. Th
 2. **PostgreSQL**: Replace filesystem-based metadata storage with PostgreSQL for reliable, concurrent data management.
 3. **Platform API**: Redesign the HTTP API for web platform use (create app → upload code → build → deploy → access via subdomain).
 
-The daemon becomes a single binary serving: the management API, the reverse proxy (fallback/debug), and coordinating the shared workerd process.
+The architecture remains a CLI + daemon two-process model (unchanged from Stage 1-5). The daemon process gains new responsibilities: serving the management API, reverse proxying to workerd, and coordinating the shared workerd process. The CLI remains a thin HTTP client to the daemon. No architectural change to the binary structure.
 
 ## Architecture
 
@@ -19,7 +19,7 @@ Browser
   ├── another.fugue.local ──┤
   │                         │
   ▼                         ▼
-Fugue Platform (single binary, port 3000)
+Fugue Platform (daemon process, port 3000)
   │
   ├── Axum HTTP Server
   │     ├── Host-based routing
@@ -519,7 +519,7 @@ docker-compose.yml           -- PostgreSQL for development
 
 ```
 Cargo.toml                    -- Add sqlx (postgres), toml, axum multipart, tower-http
-src/main.rs                   -- Single binary mode, remove CLI/daemon split
+src/main.rs                   -- Unchanged: CLI + daemon two-process model
 src/config.rs                  -- Add platform config (port, domain, workerd port, db url)
 src/daemon/server.rs           -- Rewrite: mount /api/v1/* + proxy routes
 src/daemon/state.rs            -- Replace with DbPool + AppState struct

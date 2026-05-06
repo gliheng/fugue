@@ -1,6 +1,6 @@
-# Nuxt.js Example App for Fugue
+# Nuxt.js App Example
 
-This is a minimal Nuxt 3 application configured to run on the Fugue FAAS platform.
+Full-featured Nuxt 4 application with Nuxt UI, Tailwind CSS, and multi-page routing. Deployed on the Fugue FAAS platform via real workerd.
 
 ## Setup
 
@@ -8,40 +8,36 @@ This is a minimal Nuxt 3 application configured to run on the Fugue FAAS platfor
 npm install
 ```
 
-## Development
-
-```bash
-npm run dev
-```
-
-## Build
-
-```bash
-npm run build
-```
-
-This will generate the `.output` directory with the Nitro server build.
-
 ## Deploy to Fugue
 
 ```bash
-# Start the Fugue daemon
 fugue start
-
-# Deploy the Nuxt app
-fugue deploy my-nuxt-app .
-
-# Invoke the function
-fugue invoke my-nuxt-app
+fugue deploy nuxt-app .
+fugue invoke nuxt-app
 ```
+
+## Run with workerd directly (bypassing Fugue)
+
+```bash
+./run-workerd.sh          # build + start workerd on :8787
+./run-workerd.sh build    # build only
+```
+
+## Pages
+
+- `/` — Home page with feature cards
+- `/about` — About page
+- `/features` — Feature list
+- `/contact` — Contact form
 
 ## Configuration
 
-The `nuxt.config.ts` file is configured with:
-- `nitro.preset: 'node-server'` - Ensures the build output is compatible with Node.js runtime
-- `compatibilityDate: '2024-01-01'` - Sets the compatibility date for Nuxt features
+- `nuxt.config.ts`: Uses `cloudflare_module` Nitro preset with `nodejs_compat`, Nuxt UI module
+- `wrangler.jsonc`: Standard Wrangler config (used by `npx wrangler dev`)
 
 ## Requirements
 
 - Node.js >= 18
-- Nuxt 3.x
+- Nuxt 4.x
+- workerd (for Fugue deployment)
+- esbuild (for Fugue deployment)
