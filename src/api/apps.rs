@@ -31,29 +31,8 @@ pub async fn create_app(
         ))));
     }
 
-    let mut app = crud::create_app(&state.db, &req.name, &req.framework, req.description.as_deref())
+    let app = crud::create_app(&state.db, &req.name, &req.framework, req.description.as_deref())
         .await?;
-
-    match crate::templates::populate_template_source(&app.id, &req.framework) {
-        Ok(source_dir) => {
-            if let Some(source_str) = source_dir.to_str() {
-                app = crud::update_app(
-                    &state.db,
-                    app.id,
-                    None,
-                    None,
-                    None,
-                    None,
-                    Some(source_str),
-                    None,
-                )
-                .await?;
-            }
-        }
-        Err(e) => {
-            tracing::warn!("Failed to populate template source for app '{}': {}", app.id, e);
-        }
-    }
 
     Ok((axum::http::StatusCode::CREATED, Json(app)))
 }

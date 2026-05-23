@@ -89,13 +89,23 @@ export default function Home() {
           </Card.Header>
           <Card.Content className="flex flex-col gap-3">
             <Link
+              to="/workspace"
+              className="flex items-center gap-3 p-3 rounded-lg bg-surface-tertiary hover:bg-accent-soft transition-colors"
+            >
+              <Icon icon="lucide:code-2" className="w-5 h-5 text-accent" />
+              <div>
+                <p className="font-medium text-sm">Workspace</p>
+                <p className="text-xs text-muted">Create and deploy from templates</p>
+              </div>
+            </Link>
+            <Link
               to="/apps"
               className="flex items-center gap-3 p-3 rounded-lg bg-surface-tertiary hover:bg-accent-soft transition-colors"
             >
-              <Icon icon="lucide:plus-circle" className="w-5 h-5 text-accent" />
+              <Icon icon="lucide:boxes" className="w-5 h-5 text-accent" />
               <div>
                 <p className="font-medium text-sm">Manage Apps</p>
-                <p className="text-xs text-muted">Create, deploy, and manage applications</p>
+                <p className="text-xs text-muted">View and manage applications</p>
               </div>
             </Link>
           </Card.Content>

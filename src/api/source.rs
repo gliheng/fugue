@@ -5,7 +5,56 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use serde::Deserialize;
 use uuid::Uuid;
+
+#[derive(Deserialize)]
+pub struct FilesUploadRequest {
+    pub files: std::collections::HashMap<String, String>,
+}
+
+pub async fn upload_source_files(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<FilesUploadRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let _app = crud::get_app(&state.db, id).await?;
+
+    let app_dir = crate::config::apps_data_dir().join(id.to_string());
+    let source_dir = app_dir.join("source");
+    std::fs::create_dir_all(&source_dir)?;
+
+    let mut file_count = 0u64;
+    let mut total_size = 0u64;
+
+    for (path, content) in &req.files {
+        let file_path = source_dir.join(path.trim_start_matches('/'));
+        if let Some(parent) = file_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        total_size += content.len() as u64;
+        std::fs::write(&file_path, content)?;
+        file_count += 1;
+    }
+
+    crud::update_app(
+        &state.db,
+        id,
+        None,
+        None,
+        None,
+        None,
+        Some(source_dir.to_str().unwrap_or("")),
+        None,
+    )
+    .await?;
+
+    Ok(Json(serde_json::json!({
+        "source_path": source_dir.to_string_lossy(),
+        "file_count": file_count,
+        "total_size": total_size,
+    })))
+}
 
 pub async fn upload_source(
     State(state): State<AppState>,

@@ -125,6 +125,7 @@ pub fn get_template_files(framework: &str) -> Result<Vec<(String, Vec<u8>)>, Str
     }
 }
 
+#[allow(dead_code)]
 pub fn populate_template_source(
     app_id: &uuid::Uuid,
     framework: &str,

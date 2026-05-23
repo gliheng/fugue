@@ -318,6 +318,128 @@ pub fn slugify(name: &str) -> String {
         .join("-")
 }
 
+const ADJECTIVES: &[&str] = &[
+    "eager", "bold", "swift", "quiet", "crimson", "golden", "silver",
+    "ancient", "cosmic", "brave", "gentle", "fierce", "lively", "rapid",
+    "serene", "vivid", "nimble", "sturdy", "keen", "wild", "bright",
+    "calm", "dark", "deep", "ethereal", "frosty", "grand", "hidden",
+    "iron", "jade", "lucid", "mystic", "neon", "oberon", "proud",
+    "rare", "sage", "teal", "vast", "warm", "xeric", "yielding", "zesty",
+];
+
+const NOUNS: &[&str] = &[
+    "panda", "thunder", "river", "falcon", "ocelot", "glacier", "prism",
+    "taiga", "aurora", "badger", "coyote", "drift", "ember", "fjord",
+    "gorse", "heron", "impala", "jade", "kite", "lynx", "marmot",
+    "narwhal", "orca", "pika", "quartz", "raven", "stoat", "tundra",
+    "urchin", "viper", "wren", "xerus", "yak", "zebra", "bison",
+    "cedar", "dune", "elm", "fox", "grove", "hare", "iris",
+];
+
+pub fn generate_workspace_name() -> String {
+    use std::time::SystemTime;
+    let seed = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as usize;
+    let adj_idx = seed % ADJECTIVES.len();
+    let noun_idx = (seed / ADJECTIVES.len()) % NOUNS.len();
+    format!("{}-{}", ADJECTIVES[adj_idx], NOUNS[noun_idx])
+}
+
+pub async fn create_workspace(
+    pool: &PgPool,
+    name: &str,
+    framework: &str,
+    files: &serde_json::Value,
+) -> Result<Workspace> {
+    let id = Uuid::new_v4();
+    let now = Utc::now();
+
+    let workspace = sqlx::query_as::<_, Workspace>(
+        r#"
+        INSERT INTO workspaces (id, name, framework, files, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $5)
+        RETURNING *
+        "#,
+    )
+    .bind(id)
+    .bind(name)
+    .bind(framework)
+    .bind(files)
+    .bind(now)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| match e {
+        sqlx::Error::Database(db_err) if db_err.constraint().is_some() => {
+            FugueError::DatabaseError(format!("Workspace name '{}' already exists", name))
+        }
+        _ => FugueError::DatabaseError(format!("Failed to create workspace: {}", e)),
+    })?;
+
+    Ok(workspace)
+}
+
+pub async fn get_workspace(pool: &PgPool, id: Uuid) -> Result<Workspace> {
+    sqlx::query_as::<_, Workspace>("SELECT * FROM workspaces WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| FugueError::DatabaseError(format!("Failed to get workspace: {}", e)))?
+        .ok_or_else(|| FugueError::Other(format!("Workspace {} not found", id)))
+}
+
+pub async fn list_workspaces(pool: &PgPool) -> Result<Vec<Workspace>> {
+    sqlx::query_as::<_, Workspace>("SELECT * FROM workspaces ORDER BY updated_at DESC")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| FugueError::DatabaseError(format!("Failed to list workspaces: {}", e)))
+}
+
+pub async fn update_workspace(
+    pool: &PgPool,
+    id: Uuid,
+    name: Option<&str>,
+    files: Option<&serde_json::Value>,
+) -> Result<Workspace> {
+    let now = Utc::now();
+
+    let workspace = sqlx::query_as::<_, Workspace>(
+        r#"
+        UPDATE workspaces SET
+            name = COALESCE($2, name),
+            files = COALESCE($3, files),
+            updated_at = $4
+        WHERE id = $1
+        RETURNING *
+        "#,
+    )
+    .bind(id)
+    .bind(name)
+    .bind(files)
+    .bind(now)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| FugueError::DatabaseError(format!("Failed to update workspace: {}", e)))?
+    .ok_or_else(|| FugueError::Other(format!("Workspace {} not found", id)))?;
+
+    Ok(workspace)
+}
+
+pub async fn delete_workspace(pool: &PgPool, id: Uuid) -> Result<()> {
+    let result = sqlx::query("DELETE FROM workspaces WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| FugueError::DatabaseError(format!("Failed to delete workspace: {}", e)))?;
+
+    if result.rows_affected() == 0 {
+        return Err(FugueError::Other(format!("Workspace {} not found", id)));
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

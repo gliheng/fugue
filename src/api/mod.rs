@@ -3,6 +3,8 @@ pub mod deploy;
 pub mod platform;
 pub mod runtime;
 pub mod source;
+pub mod templates;
+pub mod workspaces;
 
 use crate::config::PlatformConfig;
 use crate::process::ProcessManager;
@@ -34,6 +36,7 @@ pub fn api_router(state: AppState) -> Router {
         // Source code
         .route("/api/v1/apps/:id/source", post(source::upload_source))
         .route("/api/v1/apps/:id/source", get(source::get_source))
+        .route("/api/v1/apps/:id/source/files", post(source::upload_source_files))
         // Build & deploy
         .route("/api/v1/apps/:id/deploy", post(deploy::deploy_app))
         .route("/api/v1/apps/:id/redeploy", post(deploy::redeploy_app))
@@ -45,6 +48,15 @@ pub fn api_router(state: AppState) -> Router {
         .route("/api/v1/apps/:id/status", get(runtime::app_status))
         // Platform
         .route("/api/v1/platform/status", get(platform::platform_status))
+        // Templates
+        .route("/api/v1/templates", get(templates::list_templates))
+        .route("/api/v1/templates/:framework", get(templates::get_template))
+        // Workspaces
+        .route("/api/v1/workspaces", post(workspaces::create_workspace))
+        .route("/api/v1/workspaces", get(workspaces::list_workspaces))
+        .route("/api/v1/workspaces/:id", get(workspaces::get_workspace))
+        .route("/api/v1/workspaces/:id", patch(workspaces::update_workspace))
+        .route("/api/v1/workspaces/:id", delete(workspaces::delete_workspace))
         .with_state(state)
 }
 

@@ -12,11 +12,13 @@ export function CodeEditor({
   filePath,
   content: initialContent,
   onSave,
+  readOnly = false,
 }: {
   appId: string;
   filePath: string;
   content: string;
   onSave?: () => void;
+  readOnly?: boolean;
 }) {
   const [content, setContent] = useState(initialContent);
   const [saving, setSaving] = useState(false);
@@ -52,11 +54,13 @@ export function CodeEditor({
           <span className="text-sm font-mono text-muted">{filePath}</span>
         </div>
         <div className="flex items-center gap-2">
-          {dirty && <span className="text-xs text-warning">Unsaved changes</span>}
-          <Button size="sm" variant="secondary" onPress={handleSave} isDisabled={!dirty || saving}>
-            {saving ? <Spinner color="current" size="sm" /> : <Icon icon="lucide:save" className="w-3 h-3" />}
-            Save
-          </Button>
+          {dirty && !readOnly && <span className="text-xs text-warning">Unsaved changes</span>}
+          {!readOnly && (
+            <Button size="sm" variant="secondary" onPress={handleSave} isDisabled={!dirty || saving}>
+              {saving ? <Spinner color="current" size="sm" /> : <Icon icon="lucide:save" className="w-3 h-3" />}
+              Save
+            </Button>
+          )}
         </div>
       </Card.Header>
       <Card.Content className="p-0 overflow-hidden">
@@ -71,7 +75,7 @@ export function CodeEditor({
             height="500px"
             language={language}
             value={content}
-            onChange={handleChange}
+            onChange={readOnly ? undefined : handleChange}
             theme="vs-dark"
             options={{
               minimap: { enabled: false },
@@ -79,6 +83,7 @@ export function CodeEditor({
               lineNumbers: "on",
               wordWrap: "on",
               padding: { top: 8 },
+              readOnly,
             }}
           />
         </Suspense>

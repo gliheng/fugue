@@ -41,13 +41,13 @@ pub enum Commands {
         description: Option<String>,
     },
 
-    /// Deploy an app (upload + build + deploy). Omit path to deploy existing template source.
+    /// Deploy an app (upload source + build + deploy)
     Deploy {
         /// App name or ID
         name: String,
 
-        /// Path to JavaScript file or project directory (optional, uses template source if omitted)
-        path: Option<String>,
+        /// Path to project directory or JavaScript file
+        path: String,
 
         /// Skip build for framework projects
         #[arg(long)]

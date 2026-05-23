@@ -242,9 +242,7 @@ export default function AppDetail() {
                     appId={app.id}
                     filePath={selectedFile}
                     content={fileEntries[selectedFile]}
-                    onSave={() =>
-                      queryClient.invalidateQueries({ queryKey: ["source", id] })
-                    }
+                    readOnly
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-muted">
@@ -257,9 +255,7 @@ export default function AppDetail() {
             <div className="text-center py-20">
               <Icon icon="lucide:folder-open" className="w-12 h-12 text-muted mx-auto mb-4" />
               <p className="text-muted mb-4">No source files uploaded yet</p>
-              <Link to={`/apps/${id}/deploy`}>
-                <Button>Upload Source</Button>
-              </Link>
+              <p className="text-sm text-muted">Use the workspace to create and deploy code</p>
             </div>
           )}
         </Tabs.Panel>

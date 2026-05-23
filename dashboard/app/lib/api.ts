@@ -3,10 +3,15 @@ import type {
   AppStatus,
   Build,
   CreateAppRequest,
+  CreateWorkspaceRequest,
   DeployRequest,
   PlatformStatus,
   SourceFile,
+  TemplateDetail,
+  TemplateInfo,
+  UpdateWorkspaceRequest,
   UpdateAppRequest,
+  Workspace,
 } from "./types";
 
 const API_BASE = "/api/v1";
@@ -94,6 +99,39 @@ export const api = {
   getAppStatus: (id: string) => fetchJSON<AppStatus>(`/apps/${id}/status`),
 
   platformStatus: () => fetchJSON<PlatformStatus>("/platform/status"),
+
+  listTemplates: () => fetchJSON<TemplateInfo[]>("/templates"),
+
+  getTemplate: (framework: string) => fetchJSON<TemplateDetail>(`/templates/${framework}`),
+
+  uploadSourceFiles: (id: string, files: Record<string, string>) => {
+    return fetch(`${API_BASE}/apps/${id}/source/files`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files }),
+    }).then(async (r) => {
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({ error: r.statusText }));
+        throw new Error(body.error || `Upload failed: ${r.status}`);
+      }
+      return r.json() as Promise<{ source_path: string; file_count: number; total_size: number }>;
+    });
+  },
+
+  listWorkspaces: () => fetchJSON<Workspace[]>("/workspaces"),
+
+  getWorkspace: (id: string) => fetchJSON<Workspace>(`/workspaces/${id}`),
+
+  createWorkspace: (data: CreateWorkspaceRequest) =>
+    fetchJSON<Workspace>("/workspaces", { method: "POST", body: JSON.stringify(data) }),
+
+  updateWorkspace: (id: string, data: UpdateWorkspaceRequest) =>
+    fetchJSON<Workspace>(`/workspaces/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  deleteWorkspace: (id: string) =>
+    fetch(`${API_BASE}/workspaces/${id}`, { method: "DELETE" }).then((r) => {
+      if (!r.ok) throw new Error(`Failed to delete workspace: ${r.status}`);
+    }),
 };
 
 let cachedConfig: PlatformStatus | null = null;

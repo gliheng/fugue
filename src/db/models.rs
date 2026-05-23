@@ -127,3 +127,25 @@ pub struct DeployRequest {
 pub struct SourcePayload {
     pub files: std::collections::HashMap<String, String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Workspace {
+    pub id: Uuid,
+    pub name: String,
+    pub framework: String,
+    pub files: serde_json::Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateWorkspaceRequest {
+    pub name: Option<String>,
+    pub framework: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateWorkspaceRequest {
+    pub name: Option<String>,
+    pub files: Option<serde_json::Value>,
+}

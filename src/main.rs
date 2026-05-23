@@ -83,30 +83,24 @@ async fn run(cli: Cli) -> error::Result<()> {
 
             println!("Deploying app '{}' ({})...", app.name, app.id);
 
-            if let Some(ref p) = path {
-                let path_obj = std::path::Path::new(p);
-                if path_obj.is_file() {
-                    let result = client.upload_source_file(&app.id, path_obj).await?;
-                    println!(
-                        "Uploaded {} files ({} bytes)",
-                        result.file_count, result.total_size
-                    );
-                } else if path_obj.is_dir() {
-                    let result = client.upload_source_dir(&app.id, path_obj).await?;
-                    println!(
-                        "Uploaded {} files ({} bytes)",
-                        result.file_count, result.total_size
-                    );
-                } else {
-                    return Err(error::FugueError::ValidationError(format!(
-                        "Path not found: {}",
-                        p
-                    )));
-                }
-            } else if app.source_path.is_none() || app.source_path.as_ref().map_or(true, |s| s.is_empty()) {
-                return Err(error::FugueError::ValidationError(
-                    "No source code available. Either provide a path or create the app with template source.".to_string(),
-                ));
+            let path_obj = std::path::Path::new(&path);
+            if path_obj.is_file() {
+                let result = client.upload_source_file(&app.id, path_obj).await?;
+                println!(
+                    "Uploaded {} files ({} bytes)",
+                    result.file_count, result.total_size
+                );
+            } else if path_obj.is_dir() {
+                let result = client.upload_source_dir(&app.id, path_obj).await?;
+                println!(
+                    "Uploaded {} files ({} bytes)",
+                    result.file_count, result.total_size
+                );
+            } else {
+                return Err(error::FugueError::ValidationError(format!(
+                    "Path not found: {}",
+                    path
+                )));
             }
 
             let deploy_result = client.deploy(&app.id).await?;

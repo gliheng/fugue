@@ -75,3 +75,37 @@ export interface PlatformStatus {
   workerd_port: number;
 }
 
+export interface TemplateInfo {
+  id: string;
+  name: string;
+  framework: string;
+  description: string;
+}
+
+export interface TemplateDetail {
+  id: string;
+  name: string;
+  framework: string;
+  description: string;
+  files: Record<string, string>;
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  framework: string;
+  files: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateWorkspaceRequest {
+  name?: string;
+  framework: string;
+}
+
+export interface UpdateWorkspaceRequest {
+  name?: string;
+  files?: Record<string, string>;
+}
+
