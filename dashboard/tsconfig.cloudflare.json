@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "verbatimModuleSyntax": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "skipLibCheck": true,
+    "noEmit": true,
+    "strict": true
+  },
+  "include": [
+    "workers/app.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    ".react-router/types/**"
+  ]
+}

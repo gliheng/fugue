@@ -1,328 +1,99 @@
-use crate::client::DaemonClient;
+use crate::config::PlatformConfig;
+use crate::db::{crud, init_pool};
 use crate::error::{FugueError, Result};
-use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
+use crate::process::ProcessManager;
+use axum::response::IntoResponse;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
-pub async fn start_command() -> Result<()> {
-    // Check if daemon is already running
-    if crate::daemon::is_daemon_running()? {
-        return Err(FugueError::DaemonAlreadyRunning);
+pub async fn start_platform(db_url: Option<&str>, port: u16) -> Result<()> {
+    let mut config = PlatformConfig::load()?;
+
+    if let Some(url) = db_url {
+        config.database.url = url.to_string();
     }
+    config.platform.port = port;
 
-    println!("Starting Fugue daemon...");
+    std::fs::create_dir_all(crate::config::fugue_dir())?;
+    std::fs::create_dir_all(crate::config::workerd_dir())?;
+    std::fs::create_dir_all(crate::config::apps_data_dir())?;
 
-    // Fork process to run daemon in background
-    #[cfg(unix)]
-    {
-        use std::process::Command;
+    config.save()?;
 
-        let exe = std::env::current_exe()?;
+    init_tracing(&config.logging.level);
 
-        Command::new(exe)
-            .arg("__daemon")
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()?;
+    tracing::info!("Starting Fugue platform v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!("Database: {}", mask_db_url(&config.database.url));
+    tracing::info!("API: {}:{}", config.platform.host, config.platform.port);
+    tracing::info!("Domain: {}", config.platform.domain);
+    tracing::info!("Workerd: http://{}.{}:{}", "<app>", config.platform.domain, config.workerd.port);
 
-        // Wait a bit for daemon to start
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    let db = init_pool(&config.database.url).await?;
+    tracing::info!("Connected to PostgreSQL");
 
-        // Verify daemon started
-        if crate::daemon::is_daemon_running()? {
-            println!("✓ Daemon started successfully");
-            Ok(())
-        } else {
-            Err(FugueError::Other("Failed to start daemon".to_string()))
-        }
-    }
+    let pm = ProcessManager::new(&config)?;
+    let process = Arc::new(RwLock::new(pm));
 
-    #[cfg(not(unix))]
-    {
-        Err(FugueError::Other(
-            "Daemon mode not supported on this platform".to_string(),
-        ))
-    }
-}
-
-pub async fn stop_command() -> Result<()> {
-    println!("Stopping Fugue daemon...");
-
-    crate::daemon::stop_daemon()?;
-
-    println!("✓ Daemon stopped");
-    Ok(())
-}
-
-pub async fn status_command() -> Result<()> {
-    let client = DaemonClient::new();
-
-    match client.status().await {
-        Ok(status) => {
-            println!("Daemon Status:");
-            println!("{}", serde_json::to_string_pretty(&status)?);
-            Ok(())
-        }
-        Err(_) => {
-            println!("Daemon is not running");
-            Err(FugueError::DaemonNotRunning)
-        }
-    }
-}
-
-pub async fn deploy_command(
-    name: String,
-    path: String,
-    skip_build: bool,
-    env: Vec<String>,
-) -> Result<()> {
-    let client = DaemonClient::new();
-
-    // Check daemon is running
-    if !crate::daemon::is_daemon_running()? {
-        return Err(FugueError::DaemonNotRunning);
-    }
-
-    // Validate function name
-    crate::validation::validate_function_name(&name)?;
-
-    let path_obj = Path::new(&path);
-
-    // Auto-detect: is it a file or directory?
-    if path_obj.is_file() {
-        // Single-file deployment
-        if skip_build || !env.is_empty() {
-            return Err(FugueError::ValidationError(
-                "Options --skip-build and --env are only valid for Nuxt.js projects".to_string(),
-            ));
-        }
-
-        let code = fs::read_to_string(&path)?;
-        println!("Deploying function '{}'...", name);
-        client.deploy(&name, &code).await?;
-        println!("✓ Function '{}' deployed successfully", name);
-    } else if path_obj.is_dir() {
-        // Check if it's a Nuxt.js project
-        let nuxtjs_project = crate::nuxtjs::detect_nuxt_project(path_obj).ok();
-
-        if let Some(project) = nuxtjs_project {
-            // Nuxt.js deployment
-            // Parse environment variables
-            let mut env_vars = HashMap::new();
-            for env_str in env {
-                let parts: Vec<&str> = env_str.splitn(2, '=').collect();
-                if parts.len() != 2 {
-                    return Err(FugueError::ValidationError(format!(
-                        "Invalid environment variable format: {}. Expected KEY=VALUE",
-                        env_str
-                    )));
-                }
-                env_vars.insert(parts[0].to_string(), parts[1].to_string());
-            }
-
-            println!("Deploying Nuxt.js app '{}'...", name);
-            if skip_build {
-                println!("Skipping build (using existing .output directory)");
-            }
-
-            // Build if not skipping
-            if !skip_build {
-                println!("Building Nuxt.js project...");
-                let build_result = crate::nuxtjs::build_nuxt_project(path_obj, false)?;
-                println!("Build completed in {}ms", build_result.build_time_ms);
-            }
-
-            // Validate build output
-            crate::nuxtjs::validate_build_output(path_obj)?;
-
-            // Generate workerd artifacts (bundle, static assets, capnp config)
-            let output_dir = path_obj.join(".output");
-            println!("Generating workerd artifacts...");
-            let workerd_dir = crate::config::workerd_dir();
-            let workerd_func_dir = crate::runtime::generate_nuxtjs_workerd_artifacts(
-                &name,
-                &output_dir,
-                &workerd_dir,
-            )?;
-            println!("workerd artifacts ready at {:?}", workerd_func_dir);
-
-            // Deploy via registry
-            let registry = crate::registry::FunctionRegistry::new(crate::config::functions_dir())?;
-            let _metadata = registry.deploy_nuxtjs_function(
-                &name,
-                path_obj,
-                &output_dir,
-                env_vars,
-                project.node_version,
-            )?;
-
-            println!("✓ Nuxt.js app '{}' deployed successfully", name);
-        } else {
-            // Check if it's a React Router project
-            let reactrouter_project = crate::reactrouter::detect_reactrouter_project(path_obj).ok();
-
-            if let Some(project) = reactrouter_project {
-                // React Router deployment
-                let mut env_vars = HashMap::new();
-                for env_str in env {
-                    let parts: Vec<&str> = env_str.splitn(2, '=').collect();
-                    if parts.len() != 2 {
-                        return Err(FugueError::ValidationError(format!(
-                            "Invalid environment variable format: {}. Expected KEY=VALUE",
-                            env_str
-                        )));
-                    }
-                    env_vars.insert(parts[0].to_string(), parts[1].to_string());
-                }
-
-                println!("Deploying React Router app '{}'...", name);
-                if skip_build {
-                    println!("Skipping build (using existing build directory)");
-                }
-
-                // Build if not skipping
-                if !skip_build {
-                    println!("Building React Router project...");
-                    let build_result = crate::reactrouter::build_reactrouter_project(path_obj, false)?;
-                    println!("Build completed in {}ms", build_result.build_time_ms);
-                }
-
-                // Validate build output
-                crate::reactrouter::validate_build_output(path_obj)?;
-
-                // Generate workerd artifacts (bundle, static assets, capnp config)
-                let output_dir = path_obj.join("build");
-                println!("Generating workerd artifacts...");
-                let workerd_dir = crate::config::workerd_dir();
-                let workerd_func_dir = crate::runtime::generate_reactrouter_workerd_artifacts(
-                    &name,
-                    &output_dir,
-                    &workerd_dir,
-                )?;
-                println!("workerd artifacts ready at {:?}", workerd_func_dir);
-
-                // Deploy via registry
-                let registry = crate::registry::FunctionRegistry::new(crate::config::functions_dir())?;
-                let _metadata = registry.deploy_reactrouter_function(
-                    &name,
-                    path_obj,
-                    &output_dir,
-                    env_vars,
-                    project.node_version,
-                )?;
-
-                println!("✓ React Router app '{}' deployed successfully", name);
-            } else {
-                return Err(FugueError::ValidationError(
-                    "Directory is not a Nuxt.js or React Router project. Use a single .js file for simple functions.".to_string(),
-                ));
-            }
-        }
-    } else {
-        return Err(FugueError::ValidationError(format!(
-            "Path not found: {}",
-            path
-        )));
-    }
-
-    Ok(())
-}
-
-pub async fn invoke_command(name: String, data: Option<String>) -> Result<()> {
-    let client = DaemonClient::new();
-
-    // Check daemon is running
-    if !crate::daemon::is_daemon_running()? {
-        return Err(FugueError::DaemonNotRunning);
-    }
-
-    // Parse data - if no data provided, use empty object
-    let input = if let Some(d) = data {
-        serde_json::from_str(&d)?
-    } else {
-        serde_json::json!({})
+    let state = crate::api::AppState {
+        db: db.clone(),
+        process: process.clone(),
+        config: config.clone(),
     };
 
-    println!("Invoking function '{}'...", name);
+    let api_router = crate::api::api_router(state);
 
-    let result = client.invoke(&name, input).await?;
+    let app = api_router.fallback(|_req: axum::extract::Request| async move {
+        (
+            axum::http::StatusCode::NOT_FOUND,
+            axum::Json(serde_json::json!({
+                "error": "Not found",
+                "hint": format!("API endpoints are at /api/v1/*. App traffic is served on the workerd port directly."),
+            })),
+        ).into_response()
+    });
 
-    println!("\nResult:");
-    println!("{}", serde_json::to_string_pretty(&result)?);
+    {
+        let all_apps = crud::list_apps(&db, None, None).await?;
+        let running_apps: Vec<_> = all_apps
+            .into_iter()
+            .filter(|a| a.status == "running")
+            .collect();
 
-    Ok(())
-}
-
-pub async fn list_command() -> Result<()> {
-    let client = DaemonClient::new();
-
-    // Check daemon is running
-    if !crate::daemon::is_daemon_running()? {
-        return Err(FugueError::DaemonNotRunning);
-    }
-
-    let functions = client.list().await?;
-
-    if functions.is_empty() {
-        println!("No functions deployed");
-    } else {
-        println!("Deployed Functions:");
-        println!();
-        for func in functions {
-            println!("  • {} (ID: {})", func.name, func.id);
-            println!("    Created: {}", func.created_at);
-            println!("    Timeout: {}ms", func.timeout_ms);
-            println!();
+        if !running_apps.is_empty() {
+            let mut pm = process.write().await;
+            pm.start(&running_apps).await?;
+            tracing::info!("Started workerd with {} running apps", running_apps.len());
         }
     }
 
+    let addr = format!("{}:{}", config.platform.host, config.platform.port);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    tracing::info!("Listening on {}", addr);
+
+    axum::serve(listener, app).await.map_err(|e| {
+        FugueError::ProcessError(format!("Server error: {}", e))
+    })?;
+
     Ok(())
 }
 
-pub async fn delete_command(name: String) -> Result<()> {
-    let client = DaemonClient::new();
+fn init_tracing(level: &str) {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(level));
 
-    // Check daemon is running
-    if !crate::daemon::is_daemon_running()? {
-        return Err(FugueError::DaemonNotRunning);
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .init();
+}
+
+fn mask_db_url(url: &str) -> String {
+    if let Some(at_pos) = url.find('@') {
+        if let Some(slash_pos) = url[..at_pos].rfind('/') {
+            let prefix = &url[..slash_pos + 2];
+            let suffix = &url[at_pos..];
+            return format!("{}***:***{}", prefix, suffix);
+        }
     }
-
-    println!("Deleting function '{}'...", name);
-
-    client.delete(&name).await?;
-
-    println!("✓ Function '{}' deleted", name);
-    Ok(())
+    url.to_string()
 }
-
-pub async fn logs_command(name: String) -> Result<()> {
-    println!("Logs for function '{}':", name);
-    println!("Note: Logs not yet implemented");
-    Ok(())
-}
-
-pub async fn url_command(name: String) -> Result<()> {
-    let client = DaemonClient::new();
-
-    // Check daemon is running
-    if !crate::daemon::is_daemon_running()? {
-        return Err(FugueError::DaemonNotRunning);
-    }
-
-    let url = client.get_url(&name).await?;
-
-    if url.is_empty() {
-        println!("Function '{}' is not currently running", name);
-        println!("Invoke it first to start the workerd process");
-    } else {
-        println!("Function '{}' is available at:", name);
-        println!("{}", url);
-        println!("\nYou can access it with:");
-        println!("  curl {}", url);
-        println!("  open {}", url);
-    }
-
-    Ok(())
-}
-

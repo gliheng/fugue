@@ -3,280 +3,8 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tokio::process::{Child, Command};
-use std::process::Stdio;
 
-pub struct WorkerdProcess {
-    pub pid: Option<u32>,
-    pub port: u16,
-    pub function_name: String,
-    pub process: Child,
-}
-
-pub struct WorkerdPool {
-    processes: HashMap<String, WorkerdProcess>,
-    available_ports: Vec<u16>,
-    workerd_dir: PathBuf,
-}
-
-impl WorkerdPool {
-    pub fn new(workerd_dir: PathBuf) -> Self {
-        let mut available_ports = Vec::new();
-        for port in crate::config::WORKERD_PORT_START..=crate::config::WORKERD_PORT_END {
-            available_ports.push(port);
-        }
-
-        Self {
-            processes: HashMap::new(),
-            available_ports,
-            workerd_dir,
-        }
-    }
-
-    pub async fn get_or_spawn(
-        &mut self,
-        function_name: &str,
-        code: &str,
-    ) -> Result<u16> {
-        // Check if process already exists
-        if let Some(process) = self.processes.get(function_name) {
-            return Ok(process.port);
-        }
-
-        // Get available port
-        let port = self
-            .available_ports
-            .pop()
-            .ok_or_else(|| FugueError::WorkerdError("No available ports".to_string()))?;
-
-        // Spawn workerd process
-        let process = self.spawn_workerd(function_name, code, port).await?;
-
-        self.processes.insert(
-            function_name.to_string(),
-            WorkerdProcess {
-                pid: process.id(),
-                port,
-                function_name: function_name.to_string(),
-                process,
-            },
-        );
-
-        Ok(port)
-    }
-
-    async fn spawn_workerd(
-        &self,
-        function_name: &str,
-        code: &str,
-        port: u16,
-    ) -> Result<Child> {
-        // Create function directory
-        let func_dir = self.workerd_dir.join(function_name);
-        std::fs::create_dir_all(&func_dir)?;
-
-        // Write function code
-        let code_path = func_dir.join("worker.js");
-        std::fs::write(&code_path, code)?;
-
-        // Generate workerd config
-        let config_path = func_dir.join("config.capnp");
-        let config = self.generate_config(function_name, port);
-        std::fs::write(&config_path, config)?;
-
-        // Spawn workerd
-        let child = Command::new("workerd")
-            .arg("serve")
-            .arg(&config_path)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|e| {
-                FugueError::WorkerdError(format!("Failed to spawn workerd: {}", e))
-            })?;
-
-        // Wait a bit for workerd to start
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-        Ok(child)
-    }
-
-    fn generate_config(&self, _function_name: &str, port: u16) -> String {
-        format!(
-            r#"using Workerd = import "/workerd/workerd.capnp";
-
-const config :Workerd.Config = (
-  services = [
-    (name = "main", worker = .mainWorker),
-  ],
-  sockets = [
-    ( name = "http",
-      address = "*:{}",
-      http = (),
-      service = "main"
-    ),
-  ],
-);
-
-const mainWorker :Workerd.Worker = (
-  modules = [
-    (name = "worker.js", esModule = embed "worker.js"),
-  ],
-  compatibilityDate = "2024-01-01",
-);
-"#,
-            port
-        )
-    }
-
-    pub async fn stop_process(&mut self, function_name: &str) -> Result<()> {
-        if let Some(mut process) = self.processes.remove(function_name) {
-            process.process.kill().await.map_err(|e| {
-                FugueError::WorkerdError(format!("Failed to kill workerd: {}", e))
-            })?;
-            self.available_ports.push(process.port);
-        }
-        Ok(())
-    }
-
-    pub fn get_port(&self, function_name: &str) -> Option<u16> {
-        self.processes.get(function_name).map(|p| p.port)
-    }
-
-    pub async fn get_or_spawn_nuxtjs(
-        &mut self,
-        function_name: &str,
-        workerd_func_dir: &Path,
-        env_vars: &HashMap<String, String>,
-    ) -> Result<u16> {
-        // Check if process already exists
-        if let Some(process) = self.processes.get(function_name) {
-            return Ok(process.port);
-        }
-
-        // Get available port
-        let port = self
-            .available_ports
-            .pop()
-            .ok_or_else(|| FugueError::WorkerdError("No available ports".to_string()))?;
-
-        // Spawn workerd process for Nuxt.js
-        let process = self
-            .spawn_workerd_nuxtjs(function_name, workerd_func_dir, env_vars, port)
-            .await?;
-
-        self.processes.insert(
-            function_name.to_string(),
-            WorkerdProcess {
-                pid: process.id(),
-                port,
-                function_name: function_name.to_string(),
-                process,
-            },
-        );
-
-        Ok(port)
-    }
-
-    async fn spawn_workerd_nuxtjs(
-        &self,
-        _function_name: &str,
-        workerd_func_dir: &Path,
-        _env_vars: &HashMap<String, String>,
-        port: u16,
-    ) -> Result<Child> {
-        let config_path = workerd_func_dir.join("config.capnp");
-        if !config_path.exists() {
-            return Err(FugueError::WorkerdError(format!(
-                "workerd config not found at {:?}. Was generate_nuxtjs_workerd_artifacts() called during deploy?",
-                config_path
-            )));
-        }
-
-        tracing::info!("Spawning workerd for Nuxt.js at: {:?}", workerd_func_dir);
-
-        let child = Command::new("workerd")
-            .arg("serve")
-            .arg(&config_path)
-            .arg("-s")
-            .arg(format!("http=*:{}", port))
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|e| {
-                FugueError::WorkerdError(format!("Failed to spawn workerd: {}", e))
-            })?;
-
-        tracing::info!("workerd spawned with PID: {:?}", child.id());
-
-        // Wait for workerd to start
-        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-
-        Ok(child)
-    }
-    pub async fn get_or_spawn_reactrouter(
-        &mut self,
-        function_name: &str,
-        workerd_func_dir: &Path,
-        env_vars: &HashMap<String, String>,
-    ) -> Result<u16> {
-        // Check if process already exists
-        if let Some(process) = self.processes.get(function_name) {
-            return Ok(process.port);
-        }
-
-        // Get available port
-        let port = self
-            .available_ports
-            .pop()
-            .ok_or_else(|| FugueError::WorkerdError("No available ports".to_string()))?;
-
-        // Spawn workerd process for React Router (same as NuxtJs)
-        let process = self
-            .spawn_workerd_nuxtjs(function_name, workerd_func_dir, env_vars, port)
-            .await?;
-
-        self.processes.insert(
-            function_name.to_string(),
-            WorkerdProcess {
-                pid: process.id(),
-                port,
-                function_name: function_name.to_string(),
-                process,
-            },
-        );
-
-        Ok(port)
-    }
-}
-
-fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<()> {
-    std::fs::create_dir_all(dst)?;
-
-    for entry in walkdir::WalkDir::new(src) {
-        let entry = entry.map_err(|e| FugueError::Other(format!("Failed to walk directory: {}", e)))?;
-        let path = entry.path();
-        let relative_path = path.strip_prefix(src).unwrap();
-        let target_path = dst.join(relative_path);
-
-        if entry.file_type().is_dir() {
-            std::fs::create_dir_all(&target_path)?;
-        } else {
-            if let Some(parent) = target_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            std::fs::copy(path, &target_path)?;
-        }
-    }
-
-    Ok(())
-}
-
-/// Find the esbuild binary. Checks node_modules/.bin first, then PATH.
 fn find_esbuild() -> Result<PathBuf> {
-    // Check node_modules/.bin/esbuild in current directory
     let local = std::env::current_dir()
         .unwrap_or_default()
         .join("node_modules/.bin/esbuild");
@@ -284,7 +12,6 @@ fn find_esbuild() -> Result<PathBuf> {
         return Ok(local);
     }
 
-    // Check npx esbuild (available via npm)
     if let Ok(output) = std::process::Command::new("npx")
         .args(["esbuild", "--version"])
         .output()
@@ -294,7 +21,6 @@ fn find_esbuild() -> Result<PathBuf> {
         }
     }
 
-    // Check PATH for esbuild
     if let Ok(path) = std::env::var("PATH") {
         for dir in path.split(':') {
             let esbuild = Path::new(dir).join("esbuild");
@@ -309,13 +35,6 @@ fn find_esbuild() -> Result<PathBuf> {
     ))
 }
 
-/// Generate workerd artifacts for a Nuxt.js deployment (standalone, no WorkerdPool needed).
-///
-/// This creates:
-/// - static-assets.mjs: all public files base64-encoded in a JS module
-/// - entry.mjs: router that serves static assets or delegates to SSR
-/// - bundle.mjs: the Nitro server bundled into a single ES module (via esbuild)
-/// - config.capnp: workerd configuration with 3 services (entry, SSR, static)
 pub fn generate_nuxtjs_workerd_artifacts(
     function_name: &str,
     build_output_dir: &Path,
@@ -330,24 +49,19 @@ pub fn generate_nuxtjs_workerd_artifacts(
         ));
     }
 
-    // Create workerd artifacts directory
     let workerd_func_dir = workerd_dir.join(function_name);
     std::fs::create_dir_all(&workerd_func_dir)?;
 
-    // Step 1: Embed static assets
     tracing::info!("Embedding static assets for '{}'...", function_name);
     let assets_count = embed_static_assets(&public_dir, &workerd_func_dir)?;
     tracing::info!("Embedded {} static assets", assets_count);
 
-    // Step 2: Bundle SSR server with esbuild
     tracing::info!("Bundling SSR server with esbuild for '{}'...", function_name);
     bundle_server_with_esbuild(&server_dir, &workerd_func_dir)?;
 
-    // Step 3: Generate entry.mjs (router)
     tracing::info!("Generating entry worker for '{}'...", function_name);
     generate_entry_worker(&workerd_func_dir)?;
 
-    // Step 4: Generate config.capnp
     tracing::info!("Generating workerd config for '{}'...", function_name);
     generate_nuxtjs_capnp_config(&workerd_func_dir)?;
 
@@ -362,6 +76,12 @@ pub fn generate_nuxtjs_workerd_artifacts(
 
 fn embed_static_assets(public_dir: &Path, workerd_func_dir: &Path) -> Result<usize> {
     if !public_dir.exists() {
+        let code = r#"// Auto-generated by fugue — do not edit
+const assets = new Map([]);
+export default assets;
+"#;
+        let assets_path = workerd_func_dir.join("static-assets.mjs");
+        std::fs::write(&assets_path, code)?;
         return Ok(0);
     }
 
@@ -506,8 +226,84 @@ export default {
       }
     }
 
-    // Delegate to SSR handler via service binding
-    return env.SSR.fetch(request);
+    try {
+      return await env.SSR.fetch(request);
+    } catch (err) {
+      return new Response("SSR Error: " + (err instanceof Error ? err.message : String(err)), {
+        status: 500,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
+  },
+};
+"#;
+    let entry_path = workerd_func_dir.join("entry.mjs");
+    std::fs::write(&entry_path, entry_code)?;
+    Ok(())
+}
+
+pub fn generate_worker_workerd_artifacts(
+    function_name: &str,
+    source_dir: &Path,
+    workerd_dir: &Path,
+) -> Result<PathBuf> {
+    let worker_js = source_dir.join("worker.js");
+    if !worker_js.exists() {
+        return Err(FugueError::BuildError(
+            "worker.js not found in source directory".to_string(),
+        ));
+    }
+
+    let workerd_func_dir = workerd_dir.join(function_name);
+    std::fs::create_dir_all(&workerd_func_dir)?;
+
+    tracing::info!("Copying worker bundle for '{}'...", function_name);
+    std::fs::copy(&worker_js, workerd_func_dir.join("worker.js"))?;
+
+    let public_dir = source_dir.join("public");
+    tracing::info!("Embedding static assets for '{}'...", function_name);
+    let assets_count = embed_static_assets(&public_dir, &workerd_func_dir)?;
+    tracing::info!("Embedded {} static assets", assets_count);
+
+    tracing::info!("Generating entry worker for '{}'...", function_name);
+    generate_worker_entry_worker(&workerd_func_dir)?;
+
+    tracing::info!(
+        "workerd artifacts generated for '{}' at {:?}",
+        function_name,
+        workerd_func_dir
+    );
+
+    Ok(workerd_func_dir)
+}
+
+fn generate_worker_entry_worker(workerd_func_dir: &Path) -> Result<()> {
+    let entry_code = r#"// Auto-generated by fugue — do not edit
+import assets from "static-assets.mjs";
+import handler from "worker.js";
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const pathname = url.pathname;
+
+    // Try static assets first (map "/" to "/index.html")
+    const assetPath = pathname === "/" ? "/index.html" : pathname;
+    const asset = assets.get(assetPath);
+    if (asset) {
+      return new Response(
+        Uint8Array.from(atob(asset.data), c => c.charCodeAt(0)),
+        {
+          headers: {
+            "Content-Type": asset.mime,
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        }
+      );
+    }
+
+    // Fall through to worker handler
+    return handler.fetch(request, env, ctx);
   },
 };
 "#;
@@ -570,13 +366,6 @@ const staticWorker :Workerd.Worker = (
     Ok(())
 }
 
-/// Generate workerd artifacts for a React Router deployment (standalone, no WorkerdPool needed).
-///
-/// This creates:
-/// - static-assets.mjs: all client files base64-encoded in a JS module
-/// - entry.mjs: router that serves static assets or delegates to SSR
-/// - bundle.mjs: the server bundled into a single ES module (via esbuild)
-/// - config.capnp: workerd configuration with 3 services (entry, SSR, static)
 pub fn generate_reactrouter_workerd_artifacts(
     function_name: &str,
     build_output_dir: &Path,
@@ -591,24 +380,19 @@ pub fn generate_reactrouter_workerd_artifacts(
         ));
     }
 
-    // Create workerd artifacts directory
     let workerd_func_dir = workerd_dir.join(function_name);
     std::fs::create_dir_all(&workerd_func_dir)?;
 
-    // Step 1: Embed static assets from build/client/
     tracing::info!("Embedding static assets for '{}'...", function_name);
     let assets_count = embed_static_assets(&client_dir, &workerd_func_dir)?;
     tracing::info!("Embedded {} static assets", assets_count);
 
-    // Step 2: Bundle server with esbuild
     tracing::info!("Bundling server with esbuild for '{}'...", function_name);
     bundle_reactrouter_server_with_esbuild(&server_dir, &workerd_func_dir)?;
 
-    // Step 3: Generate entry.mjs (router)
     tracing::info!("Generating entry worker for '{}'...", function_name);
     generate_reactrouter_entry_worker(&workerd_func_dir)?;
 
-    // Step 4: Generate config.capnp
     tracing::info!("Generating workerd config for '{}'...", function_name);
     generate_reactrouter_capnp_config(&workerd_func_dir)?;
 
@@ -665,7 +449,6 @@ export default {
     const url = new URL(request.url);
     const pathname = url.pathname;
 
-    // Serve static assets
     const asset = assets.get(pathname);
     if (asset) {
       return new Response(
@@ -679,8 +462,14 @@ export default {
       );
     }
 
-    // Delegate to SSR handler via service binding
-    return env.SSR.fetch(request);
+    try {
+      return await env.SSR.fetch(request);
+    } catch (err) {
+      return new Response("SSR Error: " + (err instanceof Error ? err.message : String(err)), {
+        status: 500,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
   },
 };
 "#;

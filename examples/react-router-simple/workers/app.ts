@@ -3,7 +3,7 @@ import { createRequestHandler } from "react-router";
 declare module "react-router" {
   export interface AppLoadContext {
     cloudflare: {
-      env: Env;
+      env: Record<string, unknown>;
       ctx: ExecutionContext;
     };
   }
@@ -20,4 +20,4 @@ export default {
       cloudflare: { env, ctx },
     });
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Record<string, unknown>>;

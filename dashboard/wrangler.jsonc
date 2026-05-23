@@ -1,0 +1,19 @@
+/**
+ * Wrangler configuration for the Fugue Dashboard
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fugue-dashboard",
+  "compatibility_date": "2025-04-04",
+  "main": "./workers/app.ts",
+  "vars": {
+    "VALUE_FROM_CLOUDFLARE": "Fugue Dashboard"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "upload_source_maps": true,
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}

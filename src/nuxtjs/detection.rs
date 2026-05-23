@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::error::{FugueError, Result};
 use serde_json::Value;
 use std::path::Path;

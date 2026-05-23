@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::error::{FugueError, Result};
 use std::path::Path;
 use std::process::Command;

@@ -11,12 +11,13 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
-		"nuxt": "^4.4.4",
+    "nuxt": "^4.4.4",
     "vue": "latest"
   },
   "devDependencies": {
     "nitro-cloudflare-dev": "^0.2.2",
-    "nitropack": "^2.13.4"
+    "nitropack": "^2.13.4",
+    "wrangler": "^4.94.0"
   },
   "engines": {
     "node": ">=18"

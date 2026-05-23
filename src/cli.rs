@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "fugue")]
-#[command(about = "Serverless platform POC using Rust and workerd", long_about = None)]
+#[command(about = "Serverless platform using Rust and workerd", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -10,60 +10,90 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Start the daemon server
-    Start,
+    /// Start the Fugue platform (foreground)
+    Start {
+        /// PostgreSQL database URL
+        #[arg(long)]
+        db_url: Option<String>,
 
-    /// Stop the daemon server
+        /// Platform HTTP port
+        #[arg(long, default_value = "3000")]
+        port: u16,
+    },
+
+    /// Stop the Fugue platform
     Stop,
 
-    /// Check daemon status
+    /// Check platform status
     Status,
 
-    /// Deploy a function, Nuxt.js, or React Router application
-    Deploy {
-        /// Function name
+    /// Create a new app
+    Create {
+        /// App name
         name: String,
 
-        /// Path to JavaScript file or project directory (Nuxt.js, React Router)
-        path: String,
+        /// Framework: worker, nuxtjs, react-router
+        #[arg(short, long, default_value = "worker")]
+        framework: String,
 
-        /// Skip build for framework projects (use existing build directory)
+        /// App description
+        #[arg(short, long)]
+        description: Option<String>,
+    },
+
+    /// Deploy an app (upload + build + deploy). Omit path to deploy existing template source.
+    Deploy {
+        /// App name or ID
+        name: String,
+
+        /// Path to JavaScript file or project directory (optional, uses template source if omitted)
+        path: Option<String>,
+
+        /// Skip build for framework projects
         #[arg(long)]
         skip_build: bool,
 
-        /// Environment variables for framework projects (KEY=VALUE format)
+        /// Environment variables (KEY=VALUE format)
         #[arg(short, long)]
         env: Vec<String>,
     },
 
-    /// Get the URL of a deployed function
-    Url {
-        /// Function name
-        name: String,
-    },
-
-    /// Invoke a function
-    Invoke {
-        /// Function name
-        name: String,
-
-        /// JSON data to pass to function
-        #[arg(short, long)]
-        data: Option<String>,
-    },
-
-    /// List all deployed functions
+    /// List all apps
     List,
 
-    /// Delete a function
-    Delete {
-        /// Function name
+    /// Show app info
+    Info {
+        /// App name or ID
         name: String,
     },
 
-    /// View function logs
+    /// Delete an app
+    Delete {
+        /// App name or ID
+        name: String,
+    },
+
+    /// Get the URL of a deployed app
+    Url {
+        /// App name or ID
+        name: String,
+    },
+
+    /// View app logs
     Logs {
-        /// Function name
+        /// App name or ID
+        name: String,
+    },
+
+    /// Start a stopped app
+    StartApp {
+        /// App name or ID
+        name: String,
+    },
+
+    /// Stop a running app
+    StopApp {
+        /// App name or ID
         name: String,
     },
 }

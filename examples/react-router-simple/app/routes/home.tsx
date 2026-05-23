@@ -9,7 +9,8 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export function loader({ context }: Route.LoaderArgs) {
-  return { message: context.cloudflare.env.VALUE_FROM_CLOUDFLARE };
+  const env = (context.cloudflare?.env ?? context.env ?? {}) as Record<string, string>;
+  return { message: env.VALUE_FROM_CLOUDFLARE ?? "Hello from Fugue!" };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {

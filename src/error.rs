@@ -1,21 +1,25 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[allow(dead_code)]
 pub enum FugueError {
-    #[error("Daemon is not running")]
-    DaemonNotRunning,
+    #[error("App '{0}' not found")]
+    AppNotFound(String),
 
-    #[error("Daemon is already running")]
-    DaemonAlreadyRunning,
+    #[error("App '{0}' already exists")]
+    AppAlreadyExists(String),
 
-    #[error("Function '{0}' not found")]
-    FunctionNotFound(String),
+    #[error("Build '{0}' not found")]
+    BuildNotFound(String),
+
+    #[error("App is not running: {0}")]
+    AppNotRunning(String),
+
+    #[error("App is already running: {0}")]
+    AppAlreadyRunning(String),
 
     #[error("Execution error: {0}")]
     ExecutionError(String),
-
-    #[error("Function execution timed out")]
-    TimeoutError,
 
     #[error("Validation error: {0}")]
     ValidationError(String),
@@ -37,6 +41,18 @@ pub enum FugueError {
 
     #[error("Node.js not found or incompatible version")]
     NodeJsError,
+
+    #[error("Config error: {0}")]
+    ConfigError(String),
+
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+
+    #[error("Proxy error: {0}")]
+    ProxyError(String),
+
+    #[error("Process error: {0}")]
+    ProcessError(String),
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),

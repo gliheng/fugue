@@ -6,6 +6,10 @@
 .cache
 dist
 
+# Generated workerd artifacts
+static-assets.mjs
+.wrangler
+
 # Node dependencies
 node_modules
 
