@@ -94,9 +94,13 @@ export interface Workspace {
   id: string;
   name: string;
   framework: string;
-  files: Record<string, string>;
+  file_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface WorkspaceDetail extends Workspace {
+  files: Record<string, string>;
 }
 
 export interface CreateWorkspaceRequest {

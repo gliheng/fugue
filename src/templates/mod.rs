@@ -20,6 +20,7 @@ const SKIP_FILES: &[&str] = &[
     "workerd.capnp",
     "worker-configuration.d.ts",
     "README.md",
+    "package-lock.json",
 ];
 
 fn templates_dir() -> Option<std::path::PathBuf> {

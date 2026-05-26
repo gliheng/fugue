@@ -351,14 +351,14 @@ pub async fn create_workspace(
     pool: &PgPool,
     name: &str,
     framework: &str,
-    files: &serde_json::Value,
+    file_count: i32,
 ) -> Result<Workspace> {
     let id = Uuid::new_v4();
     let now = Utc::now();
 
     let workspace = sqlx::query_as::<_, Workspace>(
         r#"
-        INSERT INTO workspaces (id, name, framework, files, created_at, updated_at)
+        INSERT INTO workspaces (id, name, framework, file_count, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $5)
         RETURNING *
         "#,
@@ -366,7 +366,7 @@ pub async fn create_workspace(
     .bind(id)
     .bind(name)
     .bind(framework)
-    .bind(files)
+    .bind(file_count)
     .bind(now)
     .fetch_one(pool)
     .await
@@ -400,7 +400,7 @@ pub async fn update_workspace(
     pool: &PgPool,
     id: Uuid,
     name: Option<&str>,
-    files: Option<&serde_json::Value>,
+    file_count: Option<i32>,
 ) -> Result<Workspace> {
     let now = Utc::now();
 
@@ -408,7 +408,7 @@ pub async fn update_workspace(
         r#"
         UPDATE workspaces SET
             name = COALESCE($2, name),
-            files = COALESCE($3, files),
+            file_count = COALESCE($3, file_count),
             updated_at = $4
         WHERE id = $1
         RETURNING *
@@ -416,7 +416,7 @@ pub async fn update_workspace(
     )
     .bind(id)
     .bind(name)
-    .bind(files)
+    .bind(file_count)
     .bind(now)
     .fetch_optional(pool)
     .await

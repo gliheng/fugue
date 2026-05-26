@@ -133,7 +133,7 @@ pub struct Workspace {
     pub id: Uuid,
     pub name: String,
     pub framework: String,
-    pub files: serde_json::Value,
+    pub file_count: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

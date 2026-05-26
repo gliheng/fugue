@@ -123,3 +123,7 @@ pub fn data_dir() -> PathBuf {
 pub fn apps_data_dir() -> PathBuf {
     data_dir().join("apps")
 }
+
+pub fn workspaces_data_dir() -> PathBuf {
+    data_dir().join("workspaces")
+}

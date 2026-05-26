@@ -97,7 +97,7 @@ export default function WorkspaceList() {
                   </div>
                 </div>
                 <p className="text-xs text-muted">
-                  {Object.keys(ws.files).length} files · Updated {new Date(ws.updated_at).toLocaleDateString()}
+                  {ws.file_count} files · Updated {new Date(ws.updated_at).toLocaleDateString()}
                 </p>
               </Link>
               <Button

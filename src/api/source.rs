@@ -180,7 +180,7 @@ pub async fn get_source(
     Ok(Json(serde_json::json!({ "files": files })))
 }
 
-fn read_source_dir(
+pub fn read_source_dir(
     base: &std::path::Path,
     dir: &std::path::Path,
     files: &mut std::collections::HashMap<String, String>,

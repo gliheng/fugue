@@ -12,6 +12,7 @@ import type {
   UpdateWorkspaceRequest,
   UpdateAppRequest,
   Workspace,
+  WorkspaceDetail,
 } from "./types";
 
 const API_BASE = "/api/v1";
@@ -120,7 +121,7 @@ export const api = {
 
   listWorkspaces: () => fetchJSON<Workspace[]>("/workspaces"),
 
-  getWorkspace: (id: string) => fetchJSON<Workspace>(`/workspaces/${id}`),
+  getWorkspace: (id: string) => fetchJSON<WorkspaceDetail>(`/workspaces/${id}`),
 
   createWorkspace: (data: CreateWorkspaceRequest) =>
     fetchJSON<Workspace>("/workspaces", { method: "POST", body: JSON.stringify(data) }),
