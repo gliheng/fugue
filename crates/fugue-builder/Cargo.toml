@@ -1,0 +1,22 @@
+[package]
+name = "fugue-builder"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "fugue-builder"
+path = "src/main.rs"
+
+[dependencies]
+fugue-common = { path = "../fugue-common" }
+async-nats = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+anyhow = { workspace = true }
+base64 = "0.22"
+walkdir = "2"
+futures-util = "0.3"

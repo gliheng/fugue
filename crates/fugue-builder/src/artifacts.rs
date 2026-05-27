@@ -1,0 +1,442 @@
+#![allow(dead_code)]
+
+use fugue_common::error::{FugueError, Result};
+use fugue_common::models::{BuildTask, Framework};
+use fugue_common::config;
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
+use std::path::{Path, PathBuf};
+
+pub fn get_artifacts_path(task: &BuildTask) -> PathBuf {
+    let workerd_dir = config::workerd_dir();
+    workerd_dir.join(&task.app_slug)
+}
+
+pub fn generate_artifacts(task: &BuildTask) -> Result<PathBuf> {
+    let workerd_dir = config::workerd_dir();
+
+    match task.framework {
+        Framework::Worker => generate_worker_artifacts(&task.app_slug, &task.source_path, &workerd_dir),
+        Framework::NuxtJs => {
+            let output_dir = task.source_path.join(".output");
+            generate_nuxtjs_artifacts(&task.app_slug, &output_dir, &workerd_dir)
+        }
+        Framework::ReactRouter => {
+            let output_dir = task.source_path.join("build");
+            generate_reactrouter_artifacts(&task.app_slug, &output_dir, &workerd_dir)
+        }
+    }
+}
+
+fn generate_worker_artifacts(
+    function_name: &str,
+    source_dir: &Path,
+    workerd_dir: &Path,
+) -> Result<PathBuf> {
+    let worker_js = source_dir.join("worker.js");
+    if !worker_js.exists() {
+        return Err(FugueError::BuildError(
+            "worker.js not found in source directory".to_string(),
+        ));
+    }
+
+    let workerd_func_dir = workerd_dir.join(function_name);
+    std::fs::create_dir_all(&workerd_func_dir)?;
+
+    tracing::info!("Copying worker bundle for '{}'...", function_name);
+    std::fs::copy(&worker_js, workerd_func_dir.join("worker.js"))?;
+
+    let public_dir = source_dir.join("public");
+    if public_dir.exists() {
+        tracing::info!("Copying static assets for '{}'...", function_name);
+        let dest_dir = workerd_func_dir.join("public");
+        copy_public_dir(&public_dir, &dest_dir)?;
+        tracing::info!("Copied static assets to {:?}", dest_dir);
+    } else {
+        tracing::info!("No public directory found for '{}', skipping static assets", function_name);
+    }
+
+    tracing::info!("Generating entry worker for '{}'...", function_name);
+    generate_worker_entry_worker(&workerd_func_dir)?;
+
+    tracing::info!(
+        "workerd artifacts generated for '{}' at {:?}",
+        function_name,
+        workerd_func_dir
+    );
+
+    Ok(workerd_func_dir)
+}
+
+fn generate_nuxtjs_artifacts(
+    function_name: &str,
+    build_output_dir: &Path,
+    workerd_dir: &Path,
+) -> Result<PathBuf> {
+    let server_dir = build_output_dir.join("server");
+    let public_dir = build_output_dir.join("public");
+
+    if !server_dir.join("index.mjs").exists() {
+        return Err(FugueError::BuildError(
+            ".output/server/index.mjs not found".to_string(),
+        ));
+    }
+
+    let workerd_func_dir = workerd_dir.join(function_name);
+    std::fs::create_dir_all(&workerd_func_dir)?;
+
+    tracing::info!("Embedding static assets for '{}'...", function_name);
+    let assets_count = embed_static_assets(&public_dir, &workerd_func_dir)?;
+    tracing::info!("Embedded {} static assets", assets_count);
+
+    tracing::info!("Bundling SSR server with esbuild for '{}'...", function_name);
+    bundle_server_with_esbuild(&server_dir, &workerd_func_dir)?;
+
+    tracing::info!("Generating entry worker for '{}'...", function_name);
+    generate_nuxtjs_entry_worker(&workerd_func_dir)?;
+
+    tracing::info!(
+        "workerd artifacts generated for '{}' at {:?}",
+        function_name,
+        workerd_func_dir
+    );
+
+    Ok(workerd_func_dir)
+}
+
+fn generate_reactrouter_artifacts(
+    function_name: &str,
+    build_output_dir: &Path,
+    workerd_dir: &Path,
+) -> Result<PathBuf> {
+    let server_dir = build_output_dir.join("server");
+    let client_dir = build_output_dir.join("client");
+
+    if !server_dir.join("index.js").exists() {
+        return Err(FugueError::BuildError(
+            "build/server/index.js not found".to_string(),
+        ));
+    }
+
+    let workerd_func_dir = workerd_dir.join(function_name);
+    std::fs::create_dir_all(&workerd_func_dir)?;
+
+    tracing::info!("Embedding static assets for '{}'...", function_name);
+    let assets_count = embed_static_assets(&client_dir, &workerd_func_dir)?;
+    tracing::info!("Embedded {} static assets", assets_count);
+
+    tracing::info!("Bundling server with esbuild for '{}'...", function_name);
+    bundle_server_with_esbuild(&server_dir, &workerd_func_dir)?;
+
+    tracing::info!("Generating entry worker for '{}'...", function_name);
+    generate_reactrouter_entry_worker(&workerd_func_dir)?;
+
+    tracing::info!(
+        "workerd artifacts generated for '{}' at {:?}",
+        function_name,
+        workerd_func_dir
+    );
+
+    Ok(workerd_func_dir)
+}
+
+fn copy_public_dir(src: &Path, dst: &Path) -> Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_name = entry.file_name();
+        let dest_path = dst.join(&file_name);
+
+        if path.is_dir() {
+            copy_public_dir(&path, &dest_path)?;
+        } else if path.is_file() {
+            std::fs::copy(&path, &dest_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn embed_static_assets(public_dir: &Path, workerd_func_dir: &Path) -> Result<usize> {
+    use std::collections::HashMap;
+
+    if !public_dir.exists() {
+        let code = r#"// Auto-generated by fugue — do not edit
+const assets = new Map([]);
+export default assets;
+"#;
+        let assets_path = workerd_func_dir.join("static-assets.mjs");
+        std::fs::write(&assets_path, code)?;
+        return Ok(0);
+    }
+
+    let mime_types: HashMap<&str, &str> = [
+        (".js", "application/javascript"),
+        (".mjs", "application/javascript"),
+        (".css", "text/css"),
+        (".json", "application/json"),
+        (".html", "text/html"),
+        (".svg", "image/svg+xml"),
+        (".png", "image/png"),
+        (".jpg", "image/jpeg"),
+        (".jpeg", "image/jpeg"),
+        (".gif", "image/gif"),
+        (".ico", "image/x-icon"),
+        (".woff", "font/woff"),
+        (".woff2", "font/woff2"),
+        (".ttf", "font/ttf"),
+        (".webp", "image/webp"),
+        (".avif", "image/avif"),
+        (".txt", "text/plain"),
+        (".xml", "application/xml"),
+    ]
+    .iter()
+    .copied()
+    .collect();
+
+    let mut entries = Vec::new();
+    let mut count = 0usize;
+    walk_and_embed(public_dir, public_dir, &mime_types, &mut entries, &mut count)?;
+
+    let entries_str = entries.join(",\n");
+    let code = format!(
+        "// Auto-generated by fugue — do not edit\n\
+         const assets = new Map([{}]);\n\
+         export default assets;\n",
+        entries_str
+    );
+
+    let assets_path = workerd_func_dir.join("static-assets.mjs");
+    std::fs::write(&assets_path, code)?;
+
+    Ok(count)
+}
+
+fn walk_and_embed(
+    base_dir: &Path,
+    current_dir: &Path,
+    mime_types: &std::collections::HashMap<&str, &str>,
+    entries: &mut Vec<String>,
+    count: &mut usize,
+) -> Result<()> {
+    for entry in std::fs::read_dir(current_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            walk_and_embed(base_dir, &path, mime_types, entries, count)?;
+        } else if path.is_file() {
+            let relative = path.strip_prefix(base_dir).unwrap_or(&path);
+            let key = format!("/{}", relative.display());
+
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            let ext_with_dot = format!(".{}", ext);
+            let mime = mime_types
+                .get(ext_with_dot.as_str())
+                .copied()
+                .unwrap_or("application/octet-stream");
+
+            let content = std::fs::read(&path)?;
+            let b64 = BASE64.encode(&content);
+
+            entries.push(format!(
+                "[{}, {{ mime: {}, data: \"{}\" }}]",
+                serde_json::to_string(&key)?,
+                serde_json::to_string(mime)?,
+                b64
+            ));
+            *count += 1;
+        }
+    }
+    Ok(())
+}
+
+fn bundle_server_with_esbuild(server_dir: &Path, workerd_func_dir: &Path) -> Result<()> {
+    let index_mjs = server_dir.join("index.mjs");
+    let index_js = server_dir.join("index.js");
+    let bundle_out = workerd_func_dir.join("bundle.mjs");
+
+    let entry = if index_mjs.exists() {
+        index_mjs
+    } else if index_js.exists() {
+        index_js
+    } else {
+        return Err(FugueError::BuildError(
+            "No server entry point found (index.mjs or index.js)".to_string(),
+        ));
+    };
+
+    let esbuild_bin = fugue_common::fs::find_esbuild()?;
+
+    let mut cmd = if esbuild_bin.file_name().map(|f| f == "npx").unwrap_or(false) {
+        let mut c = std::process::Command::new(&esbuild_bin);
+        c.arg("esbuild");
+        c
+    } else {
+        std::process::Command::new(&esbuild_bin)
+    };
+
+    let output = cmd
+        .arg(&entry)
+        .arg("--bundle")
+        .arg("--format=esm")
+        .arg(format!("--outfile={}", bundle_out.display()))
+        .arg("--external:node:*")
+        .arg("--external:cloudflare:workers")
+        .arg("--conditions=workerd")
+        .arg("--platform=node")
+        .output()
+        .map_err(|e| FugueError::BuildError(format!("Failed to run esbuild: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(FugueError::BuildError(format!("esbuild failed: {}", stderr)));
+    }
+
+    tracing::info!("Bundle written to {:?}", bundle_out);
+    Ok(())
+}
+
+fn generate_worker_entry_worker(workerd_func_dir: &Path) -> Result<()> {
+    let entry_code = r#"// Auto-generated by fugue — do not edit
+import handler from "worker.js";
+
+const MIME_TYPES = {
+  "html": "text/html",
+  "js": "application/javascript",
+  "mjs": "application/javascript",
+  "css": "text/css",
+  "json": "application/json",
+  "svg": "image/svg+xml",
+  "png": "image/png",
+  "jpg": "image/jpeg",
+  "jpeg": "image/jpeg",
+  "gif": "image/gif",
+  "ico": "image/x-icon",
+  "woff": "font/woff",
+  "woff2": "font/woff2",
+  "ttf": "font/ttf",
+  "webp": "image/webp",
+  "avif": "image/avif",
+  "txt": "text/plain",
+  "xml": "application/xml",
+};
+
+function getMimeType(path) {
+  const ext = path.split(".").pop()?.toLowerCase();
+  return MIME_TYPES[ext] || "application/octet-stream";
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    // Try static assets via disk service first
+    const url = new URL(request.url);
+    const assetPath = url.pathname === "/" ? "/index.html" : url.pathname;
+    const assetUrl = new URL(assetPath, request.url);
+    try {
+      const assetResponse = await env.ASSETS.fetch(new Request(assetUrl, request));
+      if (assetResponse.status !== 404) {
+        const contentType = assetResponse.headers.get("Content-Type");
+        if (!contentType || contentType === "application/octet-stream") {
+          const newHeaders = new Headers(assetResponse.headers);
+          newHeaders.set("Content-Type", getMimeType(assetPath));
+          return new Response(assetResponse.body, {
+            status: assetResponse.status,
+            statusText: assetResponse.statusText,
+            headers: newHeaders,
+          });
+        }
+        return assetResponse;
+      }
+    } catch (err) {
+      // ASSETS service not available or error, fall through
+    }
+
+    // Fall through to worker handler
+    return handler.fetch(request, env, ctx);
+  },
+};
+"#;
+    let entry_path = workerd_func_dir.join("entry.mjs");
+    std::fs::write(&entry_path, entry_code)?;
+    Ok(())
+}
+
+fn generate_nuxtjs_entry_worker(workerd_func_dir: &Path) -> Result<()> {
+    let entry_code = r#"// Auto-generated by fugue — do not edit
+import assets from "static-assets.mjs";
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const pathname = url.pathname;
+
+    // Serve static assets for known file types
+    if (pathname.startsWith("/_nuxt/") || pathname.match(/\.(js|css|json|svg|png|jpg|jpeg|gif|ico|woff2?|ttf|eot|webp|avif|txt|xml)$/)) {
+      const asset = assets.get(pathname);
+      if (asset) {
+        return new Response(
+          Uint8Array.from(atob(asset.data), c => c.charCodeAt(0)),
+          {
+            headers: {
+              "Content-Type": asset.mime,
+              "Cache-Control": "public, max-age=31536000, immutable",
+            },
+          }
+        );
+      }
+    }
+
+    try {
+      return await env.SSR.fetch(request);
+    } catch (err) {
+      return new Response("SSR Error: " + (err instanceof Error ? err.message : String(err)), {
+        status: 500,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
+  },
+};
+"#;
+    let entry_path = workerd_func_dir.join("entry.mjs");
+    std::fs::write(&entry_path, entry_code)?;
+    Ok(())
+}
+
+fn generate_reactrouter_entry_worker(workerd_func_dir: &Path) -> Result<()> {
+    let entry_code = r#"// Auto-generated by fugue — do not edit
+import assets from "static-assets.mjs";
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const pathname = url.pathname;
+
+    const asset = assets.get(pathname);
+    if (asset) {
+      return new Response(
+        Uint8Array.from(atob(asset.data), c => c.charCodeAt(0)),
+        {
+          headers: {
+            "Content-Type": asset.mime,
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        }
+      );
+    }
+
+    try {
+      return await env.SSR.fetch(request);
+    } catch (err) {
+      return new Response("SSR Error: " + (err instanceof Error ? err.message : String(err)), {
+        status: 500,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
+  },
+};
+"#;
+    let entry_path = workerd_func_dir.join("entry.mjs");
+    std::fs::write(&entry_path, entry_code)?;
+    Ok(())
+}
