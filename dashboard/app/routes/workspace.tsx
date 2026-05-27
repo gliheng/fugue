@@ -148,98 +148,92 @@ export default function WorkspaceList() {
         </div>
       )}
 
-      <Modal>
-        <Modal.Backdrop isOpen={templateOpen} onOpenChange={setTemplateOpen}>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-lg">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Heading>Choose a Template</Modal.Heading>
-                <p className="text-sm text-muted">Select a framework to start from</p>
-              </Modal.Header>
-              <Modal.Body>
-                <div className="grid grid-cols-1 gap-3">
-                  {creating && (
-                    <div className="flex items-center justify-center py-4">
-                      <Spinner size="lg" />
+      <Modal.Backdrop isOpen={templateOpen} onOpenChange={setTemplateOpen}>
+        <Modal.Container>
+          <Modal.Dialog className="sm:max-w-lg">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>Choose a Template</Modal.Heading>
+              <p className="text-sm text-muted">Select a framework to start from</p>
+            </Modal.Header>
+            <Modal.Body>
+              <div className="grid grid-cols-1 gap-3">
+                {creating && (
+                  <div className="flex items-center justify-center py-4">
+                    <Spinner size="lg" />
+                  </div>
+                )}
+                {FRAMEWORK_TEMPLATES.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className="w-full text-left p-4 rounded-xl border border-border hover:border-accent hover:bg-accent-soft transition-colors flex items-center gap-3 disabled:opacity-50"
+                    onClick={() => handleCreateFromTemplate(t.id)}
+                    disabled={creating}
+                  >
+                    <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-accent-soft">
+                      <Icon icon={t.icon} className="w-5 h-5 text-accent" />
                     </div>
-                  )}
-                  {FRAMEWORK_TEMPLATES.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      className="w-full text-left p-4 rounded-xl border border-border hover:border-accent hover:bg-accent-soft transition-colors flex items-center gap-3 disabled:opacity-50"
-                      onClick={() => handleCreateFromTemplate(t.id)}
-                      disabled={creating}
-                    >
-                      <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-accent-soft">
-                        <Icon icon={t.icon} className="w-5 h-5 text-accent" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold">{t.name}</p>
-                        <p className="text-xs text-muted">{t.desc}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </Modal.Body>
-              <Modal.Footer>
-                <Button slot="close" variant="secondary">Cancel</Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+                    <div>
+                      <p className="text-sm font-semibold">{t.name}</p>
+                      <p className="text-xs text-muted">{t.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button slot="close" variant="secondary">Cancel</Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
 
-      <Modal>
-        <Modal.Backdrop isOpen={deleteId !== null} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-[360px]">
-              <Modal.Header>
-                <Modal.Icon className="bg-danger-soft text-danger-soft-foreground">
-                  <Icon icon="lucide:trash-2" className="size-5" />
-                </Modal.Icon>
-                <Modal.Heading>Delete workspace?</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                <p className="text-sm text-muted">
-                  This will permanently delete the workspace and all its files. This action cannot be undone.
-                </p>
-              </Modal.Body>
-              <Modal.Footer>
-                <Button slot="close" variant="secondary">Cancel</Button>
-                <Button variant="danger" onPress={handleDelete}>Delete</Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      <Modal.Backdrop isOpen={deleteId !== null} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
+        <Modal.Container>
+          <Modal.Dialog className="sm:max-w-[360px]">
+            <Modal.Header>
+              <Modal.Icon className="bg-danger-soft text-danger-soft-foreground">
+                <Icon icon="lucide:trash-2" className="size-5" />
+              </Modal.Icon>
+              <Modal.Heading>Delete workspace?</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body>
+              <p className="text-sm text-muted">
+                This will permanently delete the workspace and all its files. This action cannot be undone.
+              </p>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button slot="close" variant="secondary">Cancel</Button>
+              <Button variant="danger" onPress={handleDelete}>Delete</Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
 
-      <Modal>
-        <Modal.Backdrop isOpen={renameId !== null} onOpenChange={(open) => { if (!open) setRenameId(null); }}>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-[400px]">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Heading>Rename workspace</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                <Input
-                  label="Name"
-                  value={renameName}
-                  onValueChange={setRenameName}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleRename(); }}
-                  autoFocus
-                />
-              </Modal.Body>
-              <Modal.Footer>
-                <Button slot="close" variant="secondary">Cancel</Button>
-                <Button onPress={handleRename} isDisabled={!renameName.trim()}>Rename</Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      <Modal.Backdrop isOpen={renameId !== null} onOpenChange={(open) => { if (!open) setRenameId(null); }}>
+        <Modal.Container>
+          <Modal.Dialog className="sm:max-w-[400px]">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>Rename workspace</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body>
+              <Input
+                label="Name"
+                value={renameName}
+                onChange={(e) => setRenameName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleRename(); }}
+                autoFocus
+              />
+            </Modal.Body>
+            <Modal.Footer>
+              <Button slot="close" variant="secondary">Cancel</Button>
+              <Button onPress={handleRename} isDisabled={!renameName.trim()}>Rename</Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
     </div>
   );
 }

@@ -10,11 +10,11 @@ const frameworkIcons: Record<string, string> = {
   "worker": "lucide:file-code",
 };
 
-export function AppCard({ app }: { app: App }) {
+export function DeploymentCard({ app }: { app: App }) {
   return (
     <Link to={`/deployments/${app.id}`} className="block no-underline">
       <Card className="w-full hover:shadow-lg transition-shadow cursor-pointer">
-        <Card.Header className="flex items-start gap-4">
+        <Card.Header className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-accent-soft text-accent">
               <Icon

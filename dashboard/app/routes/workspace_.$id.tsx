@@ -201,134 +201,131 @@ export default function WorkspaceEditor() {
         </div>
       </div>
 
-      <Modal>
-        <Modal.Backdrop isOpen={renameOpen} onOpenChange={setRenameOpen}>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-sm">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Heading>Rename Workspace</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                <Input
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  placeholder="workspace-name"
-                  variant="secondary"
-                />
-              </Modal.Body>
-              <Modal.Footer>
-                <Button slot="close" variant="secondary">Cancel</Button>
-                <Button onPress={handleRename} isDisabled={!renameValue.trim()}>Rename</Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      <Modal.Backdrop isOpen={renameOpen} onOpenChange={setRenameOpen}>
+        <Modal.Container>
+          <Modal.Dialog className="sm:max-w-sm">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>Rename Workspace</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body>
+              <Input
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                placeholder="workspace-name"
+                variant="secondary"
+                autoFocus
+              />
+            </Modal.Body>
+            <Modal.Footer>
+              <Button slot="close" variant="secondary">Cancel</Button>
+              <Button onPress={handleRename} isDisabled={!renameValue.trim()}>Rename</Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
 
-      <Modal>
-        <Modal.Backdrop isOpen={deployOpen} onOpenChange={(open) => {
-          if (open) {
-            setDeployError(null);
-            setDeploySuccess(null);
-          }
-          setDeployOpen(open);
-        }}>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-md">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Heading>Deploy</Modal.Heading>
-                <p className="text-sm text-muted">Deploy your code to an application</p>
-              </Modal.Header>
-              <Modal.Body>
-                {deploySuccess ? (
-                  <div className="flex flex-col items-center gap-4 py-4">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-success-soft">
-                      <Icon icon="lucide:check" className="w-6 h-6 text-success" />
+      <Modal.Backdrop isOpen={deployOpen} onOpenChange={(open) => {
+        if (open) {
+          setDeployError(null);
+          setDeploySuccess(null);
+        }
+        setDeployOpen(open);
+      }}>
+        <Modal.Container>
+          <Modal.Dialog className="sm:max-w-md">
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>Deploy</Modal.Heading>
+              <p className="text-sm text-muted">Deploy your code to an application</p>
+            </Modal.Header>
+            <Modal.Body>
+              {deploySuccess ? (
+                <div className="flex flex-col items-center gap-4 py-4">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-full bg-success-soft">
+                    <Icon icon="lucide:check" className="w-6 h-6 text-success" />
+                  </div>
+                  <p className="text-sm text-center">Deploy started successfully</p>
+                  <Button onPress={() => { setDeployOpen(false); navigate(`/deployments/${deploySuccess}`); }}>
+                    <Icon icon="lucide:external-link" className="w-4 h-4" />
+                    View App
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <ToggleButtonGroup
+                    selectionMode="single"
+                    disallowEmptySelection
+                    selectedKeys={new Set([createNew ? "new" : "existing"])}
+                    onSelectionChange={(keys) => {
+                      const val = Array.from(keys)[0] as string;
+                      setCreateNew(val === "new");
+                    }}
+                  >
+                    <ToggleButton id="new">New App</ToggleButton>
+                    <ToggleButton id="existing"><ToggleButtonGroup.Separator />Existing App</ToggleButton>
+                  </ToggleButtonGroup>
+
+                  {createNew ? (
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">App Name</label>
+                      <Input
+                        value={newAppName}
+                        onChange={(e) => setNewAppName(e.target.value)}
+                        placeholder="my-app"
+                        variant="secondary"
+                      />
+                      <p className="text-xs text-muted mt-1">Framework: {frameworkLabel}</p>
                     </div>
-                    <p className="text-sm text-center">Deploy started successfully</p>
-                    <Button onPress={() => { setDeployOpen(false); navigate(`/deployments/${deploySuccess}`); }}>
-                      <Icon icon="lucide:external-link" className="w-4 h-4" />
-                      View App
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <ToggleButtonGroup
-                      selectionMode="single"
-                      disallowEmptySelection
-                      selectedKeys={new Set([createNew ? "new" : "existing"])}
-                      onSelectionChange={(keys) => {
-                        const val = Array.from(keys)[0] as string;
-                        setCreateNew(val === "new");
-                      }}
-                    >
-                      <ToggleButton id="new">New App</ToggleButton>
-                      <ToggleButton id="existing"><ToggleButtonGroup.Separator />Existing App</ToggleButton>
-                    </ToggleButtonGroup>
+                  ) : (
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Select App</label>
+                      {apps && apps.length > 0 ? (
+                        <div className="space-y-2 max-h-48 overflow-auto">
+                          {apps.map((app) => (
+                            <button
+                              key={app.id}
+                              className={`w-full text-left p-2 rounded-lg border transition-colors ${
+                                selectedAppId === app.id
+                                  ? "border-accent bg-accent-soft"
+                                  : "border-border hover:bg-surface-tertiary"
+                              }`}
+                              onClick={() => setSelectedAppId(app.id)}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium">{app.name}</span>
+                                <span className="text-xs text-muted">{app.framework}</span>
+                              </div>
+                              <span className="text-xs text-muted">{app.status}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted">No apps yet. Create one first.</p>
+                      )}
+                    </div>
+                  )}
 
-                    {createNew ? (
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">App Name</label>
-                        <Input
-                          value={newAppName}
-                          onChange={(e) => setNewAppName(e.target.value)}
-                          placeholder="my-app"
-                          variant="secondary"
-                        />
-                        <p className="text-xs text-muted mt-1">Framework: {frameworkLabel}</p>
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">Select App</label>
-                        {apps && apps.length > 0 ? (
-                          <div className="space-y-2 max-h-48 overflow-auto">
-                            {apps.map((app) => (
-                              <button
-                                key={app.id}
-                                className={`w-full text-left p-2 rounded-lg border transition-colors ${
-                                  selectedAppId === app.id
-                                    ? "border-accent bg-accent-soft"
-                                    : "border-border hover:bg-surface-tertiary"
-                                }`}
-                                onClick={() => setSelectedAppId(app.id)}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm font-medium">{app.name}</span>
-                                  <span className="text-xs text-muted">{app.framework}</span>
-                                </div>
-                                <span className="text-xs text-muted">{app.status}</span>
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted">No apps yet. Create one first.</p>
-                        )}
-                      </div>
-                    )}
-
-                    {deployError && <p className="text-sm text-danger">{deployError}</p>}
-                  </div>
-                )}
-              </Modal.Body>
-              <Modal.Footer>
-                {deploySuccess ? (
-                  <Button slot="close" variant="secondary">Close</Button>
-                ) : (
-                  <>
-                    <Button slot="close" variant="secondary">Cancel</Button>
-                    <Button onPress={handleDeploy} isDisabled={deploying || (!createNew && !selectedAppId)}>
-                      {deploying ? <Spinner color="current" size="sm" /> : <Icon icon="lucide:rocket" className="w-4 h-4" />}
-                      {deploying ? "Deploying..." : "Deploy"}
-                    </Button>
-                  </>
-                )}
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+                  {deployError && <p className="text-sm text-danger">{deployError}</p>}
+                </div>
+              )}
+            </Modal.Body>
+            <Modal.Footer>
+              {deploySuccess ? (
+                <Button slot="close" variant="secondary">Close</Button>
+              ) : (
+                <>
+                  <Button slot="close" variant="secondary">Cancel</Button>
+                  <Button onPress={handleDeploy} isDisabled={deploying || (!createNew && !selectedAppId)}>
+                    {deploying ? <Spinner color="current" size="sm" /> : <Icon icon="lucide:rocket" className="w-4 h-4" />}
+                    {deploying ? "Deploying..." : "Deploy"}
+                  </Button>
+                </>
+              )}
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
     </div>
   );
 }

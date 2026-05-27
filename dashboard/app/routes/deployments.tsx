@@ -4,7 +4,7 @@ import { Icon } from "@iconify/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api } from "../lib/api";
-import { AppCard } from "../components/app-card";
+import { DeploymentCard } from "../components/deployment-card";
 import type { Route } from "./+types/deployments";
 
 export function meta({}: Route.MetaArgs) {
@@ -68,7 +68,7 @@ export default function Deployments() {
       ) : filteredApps && filteredApps.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredApps.map((app) => (
-            <AppCard key={app.id} app={app} />
+            <DeploymentCard key={app.id} app={app} />
           ))}
         </div>
       ) : (

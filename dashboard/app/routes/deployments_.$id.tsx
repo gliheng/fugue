@@ -351,33 +351,31 @@ export default function DeploymentDetail() {
             </Card>
           </div>
 
-          <Modal>
-            <Modal.Backdrop isOpen={deleteOpen} onOpenChange={setDeleteOpen}>
-              <Modal.Container>
-                <Modal.Dialog className="sm:max-w-[360px]">
-                  <Modal.Header>
-                    <Modal.Icon className="bg-danger-soft text-danger-soft-foreground">
-                      <Icon icon="lucide:trash-2" className="size-5" />
-                    </Modal.Icon>
-                    <Modal.Heading>Delete {app.name}?</Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <p className="text-sm text-muted">
-                      This will permanently delete the app and all its data. This action cannot be undone.
-                    </p>
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button slot="close" variant="secondary">
-                      Cancel
-                    </Button>
-                    <Button variant="danger" onPress={() => deleteMutation.mutate()} isDisabled={deleteMutation.isPending}>
-                      {deleteMutation.isPending ? "Deleting..." : "Delete"}
-                    </Button>
-                  </Modal.Footer>
-                </Modal.Dialog>
-              </Modal.Container>
-            </Modal.Backdrop>
-          </Modal>
+          <Modal.Backdrop isOpen={deleteOpen} onOpenChange={setDeleteOpen}>
+            <Modal.Container>
+              <Modal.Dialog className="sm:max-w-[360px]">
+                <Modal.Header>
+                  <Modal.Icon className="bg-danger-soft text-danger-soft-foreground">
+                    <Icon icon="lucide:trash-2" className="size-5" />
+                  </Modal.Icon>
+                  <Modal.Heading>Delete {app.name}?</Modal.Heading>
+                </Modal.Header>
+                <Modal.Body>
+                  <p className="text-sm text-muted">
+                    This will permanently delete the app and all its data. This action cannot be undone.
+                  </p>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button slot="close" variant="secondary">
+                    Cancel
+                  </Button>
+                  <Button variant="danger" onPress={() => deleteMutation.mutate()} isDisabled={deleteMutation.isPending}>
+                    {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                  </Button>
+                </Modal.Footer>
+              </Modal.Dialog>
+            </Modal.Container>
+          </Modal.Backdrop>
         </Tabs.Panel>
       </Tabs>
     </div>
