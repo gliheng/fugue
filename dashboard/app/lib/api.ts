@@ -13,6 +13,7 @@ import type {
   UpdateAppRequest,
   Workspace,
   WorkspaceDetail,
+  AiGenerateEvent,
 } from "./types";
 
 const API_BASE = "/api/v1";
@@ -133,6 +134,74 @@ export const api = {
     fetch(`${API_BASE}/workspaces/${id}`, { method: "DELETE" }).then((r) => {
       if (!r.ok) throw new Error(`Failed to delete workspace: ${r.status}`);
     }),
+
+  generateAI: async function* (
+    prompt: string,
+    workspaceId: string,
+  ): AsyncGenerator<AiGenerateEvent> {
+    const res = await fetch(`${API_BASE}/ai/generate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify({ prompt, workspace_id: workspaceId }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      yield {
+        event_type: "error",
+        data: { error: body.error || `API error: ${res.status}` },
+      };
+      return;
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) {
+      yield { event_type: "error", data: { error: "No response body" } };
+      return;
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(":")) continue;
+        if (trimmed === "data: [DONE]") return;
+
+        if (trimmed.startsWith("data: ")) {
+          const jsonStr = trimmed.slice(6);
+          try {
+            const event = JSON.parse(jsonStr) as AiGenerateEvent;
+            yield event;
+          } catch {
+            // Skip malformed JSON
+          }
+        }
+      }
+    }
+
+    // Process any remaining buffer
+    if (buffer.trim() && buffer.trim().startsWith("data: ")) {
+      const jsonStr = buffer.trim().slice(6);
+      try {
+        const event = JSON.parse(jsonStr) as AiGenerateEvent;
+        yield event;
+      } catch {
+        // Skip
+      }
+    }
+  },
 };
 
 let cachedConfig: PlatformStatus | null = null;

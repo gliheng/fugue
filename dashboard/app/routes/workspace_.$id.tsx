@@ -4,9 +4,13 @@ import { Button, Card, Input, Modal, Spinner, ToggleButton, ToggleButtonGroup } 
 import { Icon } from "@iconify/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
-import { api } from "../lib/api";
+import { api, getAppUrl } from "../lib/api";
 import { FileTree } from "../components/file-tree";
+import { AiGeneratePanel } from "../components/ai-generate-panel";
+import { PreviewFrame } from "../components/preview-frame";
 import type { Route } from "./+types/workspace_.$id";
+
+const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
 const FRAMEWORK_TEMPLATES = [
   { id: "react-router", name: "React Router", icon: "lucide:route", desc: "React Router v7 with SSR" },
@@ -34,6 +38,12 @@ export default function WorkspaceEditor() {
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewAppId, setPreviewAppId] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewDeploying, setPreviewDeploying] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const { data: workspace, isLoading } = useQuery({
     queryKey: ["workspace", id],
@@ -71,6 +81,42 @@ export default function WorkspaceEditor() {
 
   const files = { ...(workspace?.files ?? {}), ...localEdits };
   const fileList = Object.keys(workspace?.files ?? {}).sort();
+
+  const handleAiGenerated = useCallback((generatedFiles: Record<string, string>) => {
+    setLocalEdits(generatedFiles);
+    // Also persist immediately
+    updateMutation.mutate(generatedFiles);
+    // Invalidate to refresh the workspace data
+    queryClient.invalidateQueries({ queryKey: ["workspace", id] });
+  }, [id, updateMutation, queryClient]);
+
+  const handlePreview = useCallback(async () => {
+    if (!workspace) return;
+    setPreviewDeploying(true);
+    setPreviewError(null);
+
+    try {
+      const sourceToUpload = files;
+      const appName = `preview-${workspace.name}-${Date.now()}`;
+      const app = await api.createApp({
+        name: appName,
+        framework: workspace.framework,
+        description: `Preview from workspace ${workspace.name}`,
+      });
+
+      await api.uploadSourceFiles(app.id, sourceToUpload);
+      await api.deploy(app.id);
+
+      setPreviewAppId(app.id);
+      setPreviewUrl(getAppUrl(app.subdomain));
+      setPreviewOpen(true);
+      await queryClient.invalidateQueries({ queryKey: ["apps"] });
+    } catch (e) {
+      setPreviewError(e instanceof Error ? e.message : "Preview deploy failed");
+    } finally {
+      setPreviewDeploying(false);
+    }
+  }, [workspace, files, queryClient]);
 
   const handleDeploy = async () => {
     if (!workspace) return;
@@ -143,6 +189,7 @@ export default function WorkspaceEditor() {
   }
 
   const frameworkLabel = FRAMEWORK_TEMPLATES.find((t) => t.id === workspace.framework)?.name ?? workspace.framework;
+  const canPreview = workspace.framework === "react-router" || workspace.framework === "nuxtjs";
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
@@ -164,12 +211,45 @@ export default function WorkspaceEditor() {
           <span className="text-xs text-muted px-2 py-0.5 rounded bg-surface-tertiary">{frameworkLabel}</span>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            onPress={() => setAiPanelOpen(!aiPanelOpen)}
+          >
+            <Icon icon="lucide:sparkles" className="w-3 h-3" />
+            AI Generate
+          </Button>
+          {canPreview && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onPress={handlePreview}
+              isDisabled={previewDeploying || Object.keys(files).length === 0}
+            >
+              {previewDeploying ? (
+                <Spinner color="current" size="sm" />
+              ) : (
+                <Icon icon="lucide:eye" className="w-3 h-3" />
+              )}
+              {previewDeploying ? "Deploying..." : "Preview"}
+            </Button>
+          )}
           <Button size="sm" onPress={() => setDeployOpen(true)}>
             <Icon icon="lucide:rocket" className="w-3 h-3" />
             Deploy
           </Button>
         </div>
       </div>
+
+      {previewError && (
+        <div className="mb-2 p-2 rounded-lg bg-danger-soft text-sm text-danger flex items-center gap-2">
+          <Icon icon="lucide:alert-circle" className="w-4 h-4" />
+          {previewError}
+          <button className="ml-auto text-muted hover:text-foreground" onClick={() => setPreviewError(null)}>
+            <Icon icon="lucide:x" className="w-3 h-3" />
+          </button>
+        </div>
+      )}
 
       {Object.keys(localEdits).length > 0 && (
         <p className="text-xs text-warning mb-2">
@@ -182,8 +262,8 @@ export default function WorkspaceEditor() {
         <div className="w-64 shrink-0 bg-surface-secondary rounded-lg p-3 overflow-auto">
           <FileTree
             files={files}
-            selectedPath={selectedFile ? `/${selectedFile}` : undefined}
-            onSelect={(path) => setSelectedFile(path.startsWith("/") ? path.slice(1) : path)}
+            selectedPath={selectedFile ?? undefined}
+            onSelect={(path) => setSelectedFile(path)}
           />
         </div>
         <div className="flex-1 min-w-0">
@@ -199,6 +279,17 @@ export default function WorkspaceEditor() {
             </div>
           )}
         </div>
+
+        {aiPanelOpen && (
+          <div className="w-80 shrink-0">
+            <AiGeneratePanel
+              framework={workspace.framework}
+              workspaceId={id!}
+              onGenerated={handleAiGenerated}
+              onClose={() => setAiPanelOpen(false)}
+            />
+          </div>
+        )}
       </div>
 
       <Modal.Backdrop isOpen={renameOpen} onOpenChange={setRenameOpen}>
@@ -326,6 +417,33 @@ export default function WorkspaceEditor() {
           </Modal.Dialog>
         </Modal.Container>
       </Modal.Backdrop>
+
+      {canPreview && (
+        <Modal.Backdrop isOpen={previewOpen} onOpenChange={setPreviewOpen}>
+          <Modal.Container className="max-w-[90vw] w-full h-[85vh]">
+            <Modal.Dialog className="w-full h-full">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>Preview</Modal.Heading>
+                <p className="text-sm text-muted">Live preview of your {frameworkLabel} app</p>
+              </Modal.Header>
+              <Modal.Body className="p-0 overflow-hidden">
+                {previewAppId && previewUrl ? (
+                  <PreviewFrame
+                    appId={previewAppId}
+                    appUrl={previewUrl}
+                    onRefresh={() => {}}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <Spinner size="lg" />
+                  </div>
+                )}
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      )}
     </div>
   );
 }
@@ -382,7 +500,7 @@ function getLanguage(path: string): string {
   const map: Record<string, string> = {
     ts: "typescript", tsx: "typescriptreact", js: "javascript", jsx: "javascript",
     json: "json", css: "css", html: "html", md: "markdown", toml: "toml",
-    rs: "rust", yml: "yaml", yaml: "yaml",
+    rs: "rust", yml: "yaml", yaml: "yaml", vue: "html",
   };
   return map[ext] ?? "plaintext";
 }

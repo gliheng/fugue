@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod apps;
 pub mod deploy;
 pub mod platform;
@@ -6,6 +7,7 @@ pub mod source;
 pub mod templates;
 pub mod workspaces;
 
+use crate::ai::AiClient;
 use crate::config::PlatformConfig;
 use crate::process::ProcessManager;
 use axum::{
@@ -23,6 +25,7 @@ pub struct AppState {
     pub db: PgPool,
     pub process: Arc<RwLock<ProcessManager>>,
     pub config: PlatformConfig,
+    pub ai_client: Option<AiClient>,
 }
 
 pub fn api_router(state: AppState) -> Router {
@@ -57,6 +60,8 @@ pub fn api_router(state: AppState) -> Router {
         .route("/api/v1/workspaces/:id", get(workspaces::get_workspace))
         .route("/api/v1/workspaces/:id", patch(workspaces::update_workspace))
         .route("/api/v1/workspaces/:id", delete(workspaces::delete_workspace))
+        // AI Generation
+        .route("/api/v1/ai/generate", post(ai::generate))
         .with_state(state)
 }
 

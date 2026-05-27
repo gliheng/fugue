@@ -1,3 +1,4 @@
+mod ai;
 mod api;
 mod cli;
 mod client;

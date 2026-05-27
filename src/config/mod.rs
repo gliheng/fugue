@@ -10,6 +10,8 @@ pub struct PlatformConfig {
     pub platform: ServerConfig,
     pub workerd: WorkerdConfig,
     pub logging: LoggingConfig,
+    #[serde(default)]
+    pub ai: Option<AiConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +40,25 @@ pub struct LoggingConfig {
     pub file: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiConfig {
+    pub api_base: String,
+    pub api_key: String,
+    pub model: String,
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: u32,
+    #[serde(default = "default_temperature")]
+    pub temperature: f32,
+}
+
+fn default_max_tokens() -> u32 {
+    16384
+}
+
+fn default_temperature() -> f32 {
+    0.7
+}
+
 impl Default for PlatformConfig {
     fn default() -> Self {
         Self {
@@ -59,6 +80,7 @@ impl Default for PlatformConfig {
                 level: defaults::DEFAULT_LOG_LEVEL.to_string(),
                 file: None,
             },
+            ai: None,
         }
     }
 }

@@ -34,10 +34,15 @@ pub async fn start_platform(db_url: Option<&str>, port: u16) -> Result<()> {
     let pm = ProcessManager::new(&config)?;
     let process = Arc::new(RwLock::new(pm));
 
+    let ai_client = config.ai.as_ref().map(|ai_config| {
+        crate::ai::AiClient::new(ai_config.clone())
+    });
+
     let state = crate::api::AppState {
         db: db.clone(),
         process: process.clone(),
         config: config.clone(),
+        ai_client,
     };
 
     let api_router = crate::api::api_router(state);

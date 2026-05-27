@@ -3,7 +3,12 @@
 import { Suspense, lazy, useState } from "react";
 import { Button, Card, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import { loader } from "@monaco-editor/react";
 import { api } from "../lib/api";
+
+loader.config({
+  paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs" },
+});
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 

@@ -54,6 +54,12 @@ pub enum FugueError {
     #[error("Process error: {0}")]
     ProcessError(String),
 
+    #[error("AI generation error: {0}")]
+    AiError(String),
+
+    #[error("AI not configured: {0}")]
+    AiNotConfigured(String),
+
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
 

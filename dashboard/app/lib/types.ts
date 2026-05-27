@@ -113,3 +113,20 @@ export interface UpdateWorkspaceRequest {
   files?: Record<string, string>;
 }
 
+export interface AiGenerateRequest {
+  prompt: string;
+  workspace_id: string;
+}
+
+export interface AiGenerateEvent {
+  event_type: "token" | "file" | "done" | "error";
+  data: {
+    text?: string;
+    path?: string;
+    content?: string;
+    file_count?: number;
+    files?: Record<string, string>;
+    error?: string;
+  };
+}
+
