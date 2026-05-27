@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Modal, Spinner } from "@heroui/react";
+import { Button, Modal, Spinner, Input } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router";
@@ -26,6 +26,8 @@ export default function WorkspaceList() {
   const [templateOpen, setTemplateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameName, setRenameName] = useState("");
 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -57,6 +59,17 @@ export default function WorkspaceList() {
       setDeleteId(null);
     } catch (e) {
       console.error("Failed to delete workspace:", e);
+    }
+  };
+
+  const handleRename = async () => {
+    if (!renameId || !renameName.trim()) return;
+    try {
+      await api.updateWorkspace(renameId, { name: renameName.trim() });
+      await queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+      setRenameId(null);
+    } catch (e) {
+      console.error("Failed to rename workspace:", e);
     }
   };
 
@@ -100,6 +113,14 @@ export default function WorkspaceList() {
                   {ws.file_count} files · Updated {new Date(ws.updated_at).toLocaleDateString()}
                 </p>
               </Link>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="absolute top-2 right-8"
+                onPress={() => { setRenameId(ws.id); setRenameName(ws.name); }}
+              >
+                <Icon icon="lucide:pencil" className="w-3 h-3" />
+              </Button>
               <Button
                 size="sm"
                 variant="ghost"
@@ -188,6 +209,32 @@ export default function WorkspaceList() {
               <Modal.Footer>
                 <Button slot="close" variant="secondary">Cancel</Button>
                 <Button variant="danger" onPress={handleDelete}>Delete</Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+
+      <Modal>
+        <Modal.Backdrop isOpen={renameId !== null} onOpenChange={(open) => { if (!open) setRenameId(null); }}>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-[400px]">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>Rename workspace</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <Input
+                  label="Name"
+                  value={renameName}
+                  onValueChange={setRenameName}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleRename(); }}
+                  autoFocus
+                />
+              </Modal.Body>
+              <Modal.Footer>
+                <Button slot="close" variant="secondary">Cancel</Button>
+                <Button onPress={handleRename} isDisabled={!renameName.trim()}>Rename</Button>
               </Modal.Footer>
             </Modal.Dialog>
           </Modal.Container>

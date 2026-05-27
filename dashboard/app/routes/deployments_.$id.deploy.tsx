@@ -5,7 +5,7 @@ import { Icon } from "@iconify/react";
 import { useQuery } from "@tanstack/react-query";
 import { api, getAppUrl } from "../lib/api";
 import { BuildLog } from "../components/build-log";
-import type { Route } from "./+types/apps_.$id.deploy";
+import type { Route } from "./+types/deployments_.$id.deploy";
 
 export function meta({ params }: Route.MetaArgs) {
   return [{ title: `Deploy - ${params.id} - Fugue Dashboard` }];
@@ -62,9 +62,9 @@ export default function AppDeploy() {
   return (
     <div className="p-8 max-w-4xl mx-auto">
       <div className="flex items-center gap-2 text-sm text-muted mb-4">
-        <Link to="/apps" className="text-accent hover:underline">Apps</Link>
+        <Link to="/deployments" className="text-accent hover:underline">Deployments</Link>
         <Icon icon="lucide:chevron-right" className="w-3 h-3" />
-        <Link to={`/apps/${id}`} className="text-accent hover:underline">{app?.name ?? id}</Link>
+        <Link to={`/deployments/${id}`} className="text-accent hover:underline">{app?.name ?? id}</Link>
         <Icon icon="lucide:chevron-right" className="w-3 h-3" />
         <span>Deploy</span>
       </div>
@@ -100,7 +100,7 @@ export default function AppDeploy() {
           <BuildLog appId={id!} buildId={buildId} />
 
           <div className="flex gap-3">
-            <Button variant="secondary" onPress={() => navigate(`/apps/${id}`)}>
+            <Button variant="secondary" onPress={() => navigate(`/deployments/${id}`)}>
               View App Details
             </Button>
             {app?.status === "running" && (

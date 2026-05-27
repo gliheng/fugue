@@ -8,8 +8,6 @@ import { api } from "../lib/api";
 import { FileTree } from "../components/file-tree";
 import type { Route } from "./+types/workspace_.$id";
 
-const MonacoEditor = lazy(() => import("@monaco-editor/react"));
-
 const FRAMEWORK_TEMPLATES = [
   { id: "react-router", name: "React Router", icon: "lucide:route", desc: "React Router v7 with SSR" },
   { id: "nuxtjs", name: "Nuxt.js", icon: "lucide:hexagon", desc: "Full-stack Nuxt.js with SSR" },
@@ -250,7 +248,7 @@ export default function WorkspaceEditor() {
                       <Icon icon="lucide:check" className="w-6 h-6 text-success" />
                     </div>
                     <p className="text-sm text-center">Deploy started successfully</p>
-                    <Button onPress={() => { setDeployOpen(false); navigate(`/apps/${deploySuccess}`); }}>
+                    <Button onPress={() => { setDeployOpen(false); navigate(`/deployments/${deploySuccess}`); }}>
                       <Icon icon="lucide:external-link" className="w-4 h-4" />
                       View App
                     </Button>

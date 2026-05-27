@@ -5,13 +5,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { api } from "../lib/api";
 import { AppCard } from "../components/app-card";
-import type { Route } from "./+types/apps";
+import type { Route } from "./+types/deployments";
 
 export function meta({}: Route.MetaArgs) {
-  return [{ title: "Apps - Fugue Dashboard" }];
+  return [{ title: "Deployments - Fugue Dashboard" }];
 }
 
-export default function Apps() {
+export default function Deployments() {
   const [filter, setFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
@@ -30,8 +30,8 @@ export default function Apps() {
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold">Apps</h1>
-          <p className="text-muted mt-1">Manage your applications</p>
+          <h1 className="text-3xl font-bold">Deployments</h1>
+          <p className="text-muted mt-1">Manage your deployments</p>
         </div>
       </div>
 

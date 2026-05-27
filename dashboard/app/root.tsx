@@ -38,7 +38,7 @@ export const links: Route.LinksFunction = () => [
 const navItems = [
   { to: "/", label: "Dashboard", icon: "lucide:layout-dashboard" },
   { to: "/workspace", label: "Workspace", icon: "lucide:code-2" },
-  { to: "/apps", label: "Apps", icon: "lucide:boxes" },
+  { to: "/deployments", label: "Deployments", icon: "lucide:boxes" },
 ];
 
 function Sidebar() {

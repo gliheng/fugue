@@ -4,7 +4,7 @@ export default [
   index("routes/home.tsx"),
   route("workspace", "routes/workspace.tsx"),
   route("workspace/:id", "routes/workspace_.$id.tsx"),
-  route("apps", "routes/apps.tsx"),
-  route("apps/:id", "routes/apps_.$id.tsx"),
-  route("apps/:id/deploy", "routes/apps_.$id.deploy.tsx"),
+  route("deployments", "routes/deployments.tsx"),
+  route("deployments/:id", "routes/deployments_.$id.tsx"),
+  route("deployments/:id/deploy", "routes/deployments_.$id.deploy.tsx"),
 ] satisfies RouteConfig;

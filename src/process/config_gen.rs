@@ -9,7 +9,7 @@ fn has_required_artifacts(app: &App, workerd_dir: &Path) -> bool {
     }
 
     let required_files: &[&str] = match app.framework.as_str() {
-        "worker" => &["entry.mjs", "worker.js", "static-assets.mjs"],
+        "worker" => &["entry.mjs", "worker.js"],
         "nuxtjs" | "react-router" => &["entry.mjs", "bundle.mjs", "static-assets.mjs"],
         _ => &[],
     };
@@ -102,10 +102,15 @@ fn generate_config_capnp(apps: &[&App], port: u16) -> String {
         match app.framework.as_str() {
             "worker" => {
                 let service_name = format!("app-{}", slug);
+                let assets_service = format!("assets-{}", slug);
                 services.push(format!(
                     "    (name = \"{}\", worker = .{}),",
                     service_name,
                     to_camel_case(slug)
+                ));
+                services.push(format!(
+                    "    (name = \"{}\", disk = \"./{}/public\"),",
+                    assets_service, slug
                 ));
                 workers.push(generate_worker_def(slug, &app.status));
             }
@@ -204,12 +209,14 @@ fn generate_worker_def(slug: &str, _status: &str) -> String {
   modules = [
     (name = "{}/entry.mjs", esModule = embed "{}/entry.mjs"),
     (name = "{}/worker.js", esModule = embed "{}/worker.js"),
-    (name = "{}/static-assets.mjs", esModule = embed "{}/static-assets.mjs"),
   ],
   compatibilityDate = "2026-04-21",
   compatibilityFlags = ["nodejs_compat"],
+  bindings = [
+    (name = "ASSETS", service = "assets-{}"),
+  ],
 );"#,
-        camel, slug, slug, slug, slug, slug, slug
+        camel, slug, slug, slug, slug, slug
     )
 }
 
@@ -394,6 +401,8 @@ mod tests {
         assert!(config.contains(r#"name = "app-my-api""#));
         assert!(config.contains("myApiWorker"));
         assert!(config.contains(r#"name = "APP_MY_API", service = "app-my-api""#));
+        assert!(config.contains(r#"name = "assets-my-api", disk = "./my-api/public""#));
+        assert!(config.contains(r#"name = "ASSETS", service = "assets-my-api""#));
     }
 
     #[test]
@@ -430,6 +439,7 @@ mod tests {
         assert!(config.contains(r#"address = "*:9090""#));
         assert!(config.contains(r#"name = "app-blog""#));
         assert!(config.contains(r#"name = "app-api""#));
+        assert!(config.contains(r#"name = "assets-api", disk = "./api/public""#));
         assert!(config.contains(r#"name = "APP_BLOG", service = "app-blog""#));
         assert!(config.contains(r#"name = "APP_API", service = "app-api""#));
     }
@@ -462,7 +472,6 @@ mod tests {
         std::fs::create_dir_all(&slug_dir).unwrap();
         std::fs::write(slug_dir.join("entry.mjs"), "").unwrap();
         std::fs::write(slug_dir.join("worker.js"), "").unwrap();
-        std::fs::write(slug_dir.join("static-assets.mjs"), "").unwrap();
 
         let apps = vec![make_app("my-worker", "worker", "running")];
         generate_dispatch_config(&apps, &dir, 8080).unwrap();
@@ -481,7 +490,6 @@ mod tests {
         std::fs::create_dir_all(&slug_dir).unwrap();
         std::fs::write(slug_dir.join("entry.mjs"), "").unwrap();
         std::fs::write(slug_dir.join("worker.js"), "").unwrap();
-        std::fs::write(slug_dir.join("static-assets.mjs"), "").unwrap();
 
         let apps = vec![make_app("test-app", "worker", "running")];
         generate_dispatch_config(&apps, &dir, 8080).unwrap();
@@ -507,7 +515,6 @@ mod tests {
 
         std::fs::write(slug_dir.join("entry.mjs"), "").unwrap();
         std::fs::write(slug_dir.join("worker.js"), "").unwrap();
-        std::fs::write(slug_dir.join("static-assets.mjs"), "").unwrap();
         assert!(has_required_artifacts(&app, &dir));
 
         let _ = std::fs::remove_dir_all(&dir);

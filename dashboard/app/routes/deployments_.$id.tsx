@@ -9,13 +9,13 @@ import { DeployButton } from "../components/deploy-button";
 import { CodeEditor } from "../components/code-editor";
 import { FileTree } from "../components/file-tree";
 import { BuildLog } from "../components/build-log";
-import type { Route } from "./+types/apps_.$id";
+import type { Route } from "./+types/deployments_.$id";
 
 export function meta({ params }: Route.MetaArgs) {
-  return [{ title: `App ${params.id} - Fugue Dashboard` }];
+  return [{ title: `Deployment ${params.id} - Fugue Dashboard` }];
 }
 
-export default function AppDetail() {
+export default function DeploymentDetail() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") ?? "overview");
@@ -55,7 +55,7 @@ export default function AppDetail() {
     mutationFn: () => api.deleteApp(id!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["apps"] });
-      window.location.href = "/apps";
+      window.location.href = "/deployments";
     },
   });
 
@@ -71,7 +71,7 @@ export default function AppDetail() {
     return (
       <div className="text-center py-20">
         <p className="text-muted">App not found</p>
-        <Link to="/apps" className="text-accent mt-2 inline-block">Back to Apps</Link>
+        <Link to="/deployments" className="text-accent mt-2 inline-block">Back to Deployments</Link>
       </div>
     );
   }
@@ -91,7 +91,7 @@ export default function AppDetail() {
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex items-center gap-2 text-sm text-muted mb-4">
-        <Link to="/apps" className="text-accent hover:underline">Apps</Link>
+        <Link to="/deployments" className="text-accent hover:underline">Deployments</Link>
         <Icon icon="lucide:chevron-right" className="w-3 h-3" />
         <span>{app.name}</span>
       </div>
@@ -283,7 +283,7 @@ export default function AppDetail() {
                       </span>
                     </div>
                     {build.status === "running" && (
-                      <Link to={`/apps/${id}/deploy`}>
+                      <Link to={`/deployments/${id}/deploy`}>
                         <Button size="sm" variant="ghost">View Logs</Button>
                       </Link>
                     )}

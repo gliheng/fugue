@@ -12,9 +12,9 @@ const frameworkIcons: Record<string, string> = {
 
 export function AppCard({ app }: { app: App }) {
   return (
-    <Link to={`/apps/${app.id}`} className="block no-underline">
+    <Link to={`/deployments/${app.id}`} className="block no-underline">
       <Card className="w-full hover:shadow-lg transition-shadow cursor-pointer">
-        <Card.Header className="flex items-center justify-between">
+        <Card.Header className="flex items-start gap-4">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-accent-soft text-accent">
               <Icon

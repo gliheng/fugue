@@ -10,11 +10,16 @@ pub async fn platform_status(
     let pm = state.process.read().await;
     let workerd_running = pm.is_running();
 
+    let status = if workerd_running { "healthy" } else { "degraded" };
+
     Json(serde_json::json!({
+        "status": status,
         "version": env!("CARGO_PKG_VERSION"),
-        "apps_total": total,
-        "apps_running": running,
-        "workerd_running": workerd_running,
+        "uptime": 0,
+        "apps": {
+            "total": total,
+            "running": running,
+        },
         "domain": state.config.platform.domain,
         "port": state.config.platform.port,
         "workerd_port": state.config.workerd.port,

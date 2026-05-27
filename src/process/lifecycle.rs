@@ -134,6 +134,7 @@ impl ProcessManager {
 
         let mut child = Command::new(&self.workerd_binary)
             .args(&args)
+            .current_dir(&self.workerd_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -147,7 +148,7 @@ impl ProcessManager {
                 let reader = BufReader::new(stderr);
                 let mut lines = reader.lines();
                 while let Ok(Some(line)) = lines.next_line().await {
-                    tracing::error!("[workerd] {}", line);
+                    tracing::info!("[workerd] {}", line);
                 }
             });
         }
