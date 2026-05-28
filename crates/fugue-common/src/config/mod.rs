@@ -41,8 +41,6 @@ pub struct LoggingConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NatsConfig {
-    pub embedded: bool,
-    pub port: u16,
     pub url: String,
 }
 
@@ -68,8 +66,6 @@ impl Default for PlatformConfig {
                 file: None,
             },
             nats: NatsConfig {
-                embedded: true,
-                port: defaults::DEFAULT_NATS_PORT,
                 url: defaults::DEFAULT_NATS_URL.to_string(),
             },
         }

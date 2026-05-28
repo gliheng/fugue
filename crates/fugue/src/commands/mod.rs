@@ -33,30 +33,14 @@ pub async fn start_platform(db_url: Option<&str>, port: u16) -> Result<()> {
     tracing::info!("Connected to PostgreSQL");
 
     // Connect to NATS
-    let nats_client = if config.nats.embedded {
-        tracing::info!("Starting embedded NATS server on port {}", config.nats.port);
-        // For now, connect to external NATS. Embedded NATS requires additional setup.
-        // TODO: Implement embedded NATS server
-        match async_nats::connect(&config.nats.url).await {
-            Ok(client) => {
-                tracing::info!("Connected to NATS at {}", config.nats.url);
-                Some(client)
-            }
-            Err(e) => {
-                tracing::warn!("Failed to connect to NATS: {}. Builds will run in-process.", e);
-                None
-            }
+    let nats_client = match async_nats::connect(&config.nats.url).await {
+        Ok(client) => {
+            tracing::info!("Connected to NATS at {}", config.nats.url);
+            Some(client)
         }
-    } else {
-        match async_nats::connect(&config.nats.url).await {
-            Ok(client) => {
-                tracing::info!("Connected to NATS at {}", config.nats.url);
-                Some(client)
-            }
-            Err(e) => {
-                tracing::warn!("Failed to connect to NATS: {}. Builds will run in-process.", e);
-                None
-            }
+        Err(e) => {
+            tracing::warn!("Failed to connect to NATS: {}. Builds will run in-process.", e);
+            None
         }
     };
 

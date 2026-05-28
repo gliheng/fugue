@@ -147,20 +147,24 @@ pub enum LogStream {
 
 ## Embedded NATS Server
 
-The `fugue start` command launches an embedded NATS server:
+NATS runs via docker-compose alongside PostgreSQL:
 
-```rust
-// In src/commands/mod.rs - start_platform()
-use embedded_nats::Server;
+```yaml
+# docker-compose.yml
+services:
+  nats:
+    image: nats:2-alpine
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: "--jetstream"
+    volumes:
+      - fugue_natsdata:/data
+```
 
-let nats_server = Server::builder()
-    .bind("127.0.0.1:4222")
-    .start()
-    .await?;
-
-info!("Embedded NATS server started on 127.0.0.1:4222");
-
-let nats_client = async_nats::connect("nats://127.0.0.1:4222").await?;
+```bash
+# Start services
+docker compose up -d
 ```
 
 ## Builder Main Loop (fugue-builder/src/main.rs)
@@ -427,7 +431,6 @@ anyhow = "1"
 ### fugue/Cargo.toml (additions)
 ```toml
 async-nats = "0.35"
-embedded-nats = "0.5"
 ```
 
 ## Migration Steps
@@ -469,8 +472,7 @@ embedded-nats = "0.5"
 ### fugue daemon config.toml
 ```toml
 [nats]
-embedded = true              # Start embedded NATS server (default: true)
-port = 4222                  # NATS port (default: 4222)
+url = "nats://localhost:4222"  # NATS server URL
 ```
 
 ### fugue-builder environment variables
@@ -482,18 +484,18 @@ RUST_LOG=info                     # Log level
 ## Running
 
 ```bash
-# Terminal 1: Start fugue daemon (includes embedded NATS)
+# 1. Start infrastructure (PostgreSQL + NATS)
+docker compose up -d
+
+# 2. Start fugue daemon
 fugue start
 
-# Terminal 2: Start builder process
+# 3. Start builder process(es)
 fugue-builder
 
 # Run multiple builders for load balancing
 fugue-builder  # Instance 1
 fugue-builder  # Instance 2
-
-# Or connect to remote NATS
-NATS_URL=nats://remote:4222 fugue-builder
 ```
 
 ## Testing
