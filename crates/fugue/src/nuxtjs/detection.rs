@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use fugue_common::error::{FugueError, Result};
+use fugue_common::project_config::ProjectConfig;
 use serde_json::Value;
 use std::path::Path;
 
@@ -103,25 +104,34 @@ fn is_nuxt_3_or_higher(version: &str) -> bool {
 }
 
 pub fn validate_build_output(project_dir: &Path) -> Result<()> {
-    let output_dir = project_dir.join(".output");
+    let config = ProjectConfig::load(project_dir, "nuxtjs")?;
+    let output_dir = project_dir.join(&config.build_output_dir);
+
     if !output_dir.exists() {
-        return Err(FugueError::BuildError(
-            ".output directory not found. Did the build succeed?".to_string(),
-        ));
+        return Err(FugueError::BuildError(format!(
+            "{} directory not found. Did the build succeed?",
+            config.build_output_dir
+        )));
     }
 
     let server_dir = output_dir.join("server");
     if !server_dir.exists() {
-        return Err(FugueError::BuildError(
-            ".output/server directory not found. Ensure Nitro is configured correctly.".to_string(),
-        ));
+        return Err(FugueError::BuildError(format!(
+            "{}/server directory not found. Ensure Nitro is configured correctly.",
+            config.build_output_dir
+        )));
     }
 
-    let index_mjs = server_dir.join("index.mjs");
-    if !index_mjs.exists() {
-        return Err(FugueError::BuildError(
-            ".output/server/index.mjs not found. This is the Nitro server entry point.".to_string(),
-        ));
+    let server_entry = config
+        .server_entry
+        .as_deref()
+        .unwrap_or("server/index.mjs");
+    let index_file = server_dir.join(server_entry);
+    if !index_file.exists() {
+        return Err(FugueError::BuildError(format!(
+            "{}/{} not found. This is the Nitro server entry point.",
+            config.build_output_dir, server_entry
+        )));
     }
 
     Ok(())

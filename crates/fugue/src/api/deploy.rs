@@ -211,11 +211,11 @@ async fn run_build(
 
     let workerd_dir = crate::config::workerd_dir();
 
+    let build_result = fugue_common::builder::build_project(&source_dir, framework, false)?;
+    tracing::info!("Build completed in {}ms", build_result.build_time_ms);
+
     match framework {
         "worker" => {
-            let build_result = crate::worker::build_worker_project(&source_dir, false)?;
-            tracing::info!("Worker build completed in {}ms", build_result.build_time_ms);
-
             crate::runtime::generate_worker_workerd_artifacts(
                 app_slug,
                 &source_dir,
@@ -223,34 +223,18 @@ async fn run_build(
             )?;
         }
         "nuxtjs" => {
-            // Build with npm
-            let build_result =
-                crate::nuxtjs::build_nuxt_project(&source_dir, false)?;
-            tracing::info!("Nuxt.js build completed in {}ms", build_result.build_time_ms);
-
-            let output_dir = source_dir.join(".output");
             crate::nuxtjs::validate_build_output(&source_dir)?;
-
             crate::runtime::generate_nuxtjs_workerd_artifacts(
                 app_slug,
-                &output_dir,
+                &source_dir,
                 &workerd_dir,
             )?;
         }
         "react-router" => {
-            let build_result =
-                crate::reactrouter::build_reactrouter_project(&source_dir, false)?;
-            tracing::info!(
-                "React Router build completed in {}ms",
-                build_result.build_time_ms
-            );
-
             crate::reactrouter::validate_build_output(&source_dir)?;
-
-            let output_dir = source_dir.join("build");
             crate::runtime::generate_reactrouter_workerd_artifacts(
                 app_slug,
-                &output_dir,
+                &source_dir,
                 &workerd_dir,
             )?;
         }

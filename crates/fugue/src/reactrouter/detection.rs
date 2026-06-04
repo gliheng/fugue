@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use fugue_common::error::{FugueError, Result};
+use fugue_common::project_config::ProjectConfig;
 use serde_json::Value;
 use std::path::Path;
 
@@ -57,25 +58,34 @@ pub fn detect_reactrouter_project(project_dir: &Path) -> Result<ReactRouterProje
 }
 
 pub fn validate_build_output(project_dir: &Path) -> Result<()> {
-    let build_dir = project_dir.join("build");
+    let config = ProjectConfig::load(project_dir, "react-router")?;
+    let build_dir = project_dir.join(&config.build_output_dir);
+
     if !build_dir.exists() {
-        return Err(FugueError::BuildError(
-            "build directory not found. Did the build succeed?".to_string(),
-        ));
+        return Err(FugueError::BuildError(format!(
+            "{} directory not found. Did the build succeed?",
+            config.build_output_dir
+        )));
     }
 
     let server_dir = build_dir.join("server");
     if !server_dir.exists() {
-        return Err(FugueError::BuildError(
-            "build/server directory not found".to_string(),
-        ));
+        return Err(FugueError::BuildError(format!(
+            "{}/server directory not found",
+            config.build_output_dir
+        )));
     }
 
-    let index_js = server_dir.join("index.js");
-    if !index_js.exists() {
-        return Err(FugueError::BuildError(
-            "build/server/index.js not found".to_string(),
-        ));
+    let server_entry = config
+        .server_entry
+        .as_deref()
+        .unwrap_or("server/index.js");
+    let index_file = server_dir.join(server_entry);
+    if !index_file.exists() {
+        return Err(FugueError::BuildError(format!(
+            "{}/{} not found",
+            config.build_output_dir, server_entry
+        )));
     }
 
     Ok(())

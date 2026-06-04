@@ -1,0 +1,9 @@
+[assets]
+dir = ".output/public"
+prefix = "/_nuxt/"
+
+[build]
+output_dir = ".output"
+server_entry = "server/index.mjs"
+install = "npm install"
+command = "npm run build"

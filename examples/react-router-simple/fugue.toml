@@ -1,0 +1,9 @@
+[assets]
+dir = "build/client"
+prefix = ""
+
+[build]
+output_dir = "build"
+server_entry = "server/index.js"
+install = "npm install"
+command = "npm run build"

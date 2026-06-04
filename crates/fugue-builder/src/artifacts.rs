@@ -3,6 +3,7 @@
 use fugue_common::error::{FugueError, Result};
 use fugue_common::models::{BuildTask, Framework};
 use fugue_common::config;
+use fugue_common::project_config::ProjectConfig;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use std::path::{Path, PathBuf};
@@ -17,14 +18,8 @@ pub fn generate_artifacts(task: &BuildTask) -> Result<PathBuf> {
 
     match task.framework {
         Framework::Worker => generate_worker_artifacts(&task.app_slug, &task.source_path, &workerd_dir),
-        Framework::NuxtJs => {
-            let output_dir = task.source_path.join(".output");
-            generate_nuxtjs_artifacts(&task.app_slug, &output_dir, &workerd_dir)
-        }
-        Framework::ReactRouter => {
-            let output_dir = task.source_path.join("build");
-            generate_reactrouter_artifacts(&task.app_slug, &output_dir, &workerd_dir)
-        }
+        Framework::NuxtJs => generate_nuxtjs_artifacts(&task.app_slug, &task.source_path, &workerd_dir),
+        Framework::ReactRouter => generate_reactrouter_artifacts(&task.app_slug, &task.source_path, &workerd_dir),
     }
 }
 
@@ -33,6 +28,8 @@ fn generate_worker_artifacts(
     source_dir: &Path,
     workerd_dir: &Path,
 ) -> Result<PathBuf> {
+    let config = ProjectConfig::load(source_dir, "worker")?;
+
     let worker_js = source_dir.join("worker.js");
     if !worker_js.exists() {
         return Err(FugueError::BuildError(
@@ -46,7 +43,7 @@ fn generate_worker_artifacts(
     tracing::info!("Copying worker bundle for '{}'...", function_name);
     std::fs::copy(&worker_js, workerd_func_dir.join("worker.js"))?;
 
-    let public_dir = source_dir.join("public");
+    let public_dir = source_dir.join(&config.assets_dir);
     if public_dir.exists() {
         tracing::info!("Copying static assets for '{}'...", function_name);
         let dest_dir = workerd_func_dir.join("public");
@@ -70,16 +67,23 @@ fn generate_worker_artifacts(
 
 fn generate_nuxtjs_artifacts(
     function_name: &str,
-    build_output_dir: &Path,
+    source_dir: &Path,
     workerd_dir: &Path,
 ) -> Result<PathBuf> {
-    let server_dir = build_output_dir.join("server");
-    let public_dir = build_output_dir.join("public");
+    let config = ProjectConfig::load(source_dir, "nuxtjs")?;
+    let output_dir = source_dir.join(&config.build_output_dir);
+    let server_dir = output_dir.join("server");
+    let public_dir = source_dir.join(&config.assets_dir);
 
-    if !server_dir.join("index.mjs").exists() {
-        return Err(FugueError::BuildError(
-            ".output/server/index.mjs not found".to_string(),
-        ));
+    let server_entry = config
+        .server_entry
+        .as_deref()
+        .unwrap_or("server/index.mjs");
+    if !server_dir.join(server_entry).exists() {
+        return Err(FugueError::BuildError(format!(
+            "{}/{} not found",
+            config.build_output_dir, server_entry
+        )));
     }
 
     let workerd_func_dir = workerd_dir.join(function_name);
@@ -93,7 +97,7 @@ fn generate_nuxtjs_artifacts(
     bundle_server_with_esbuild(&server_dir, &workerd_func_dir)?;
 
     tracing::info!("Generating entry worker for '{}'...", function_name);
-    generate_nuxtjs_entry_worker(&workerd_func_dir)?;
+    generate_nuxtjs_entry_worker(&workerd_func_dir, &config.assets_prefix)?;
 
     tracing::info!(
         "workerd artifacts generated for '{}' at {:?}",
@@ -106,16 +110,23 @@ fn generate_nuxtjs_artifacts(
 
 fn generate_reactrouter_artifacts(
     function_name: &str,
-    build_output_dir: &Path,
+    source_dir: &Path,
     workerd_dir: &Path,
 ) -> Result<PathBuf> {
-    let server_dir = build_output_dir.join("server");
-    let client_dir = build_output_dir.join("client");
+    let config = ProjectConfig::load(source_dir, "react-router")?;
+    let output_dir = source_dir.join(&config.build_output_dir);
+    let server_dir = output_dir.join("server");
+    let client_dir = source_dir.join(&config.assets_dir);
 
-    if !server_dir.join("index.js").exists() {
-        return Err(FugueError::BuildError(
-            "build/server/index.js not found".to_string(),
-        ));
+    let server_entry = config
+        .server_entry
+        .as_deref()
+        .unwrap_or("server/index.js");
+    if !server_dir.join(server_entry).exists() {
+        return Err(FugueError::BuildError(format!(
+            "{}/{} not found",
+            config.build_output_dir, server_entry
+        )));
     }
 
     let workerd_func_dir = workerd_dir.join(function_name);
@@ -129,7 +140,7 @@ fn generate_reactrouter_artifacts(
     bundle_server_with_esbuild(&server_dir, &workerd_func_dir)?;
 
     tracing::info!("Generating entry worker for '{}'...", function_name);
-    generate_reactrouter_entry_worker(&workerd_func_dir)?;
+    generate_reactrouter_entry_worker(&workerd_func_dir, &config.assets_prefix)?;
 
     tracing::info!(
         "workerd artifacts generated for '{}' at {:?}",
@@ -362,80 +373,102 @@ export default {
     Ok(())
 }
 
-fn generate_nuxtjs_entry_worker(workerd_func_dir: &Path) -> Result<()> {
-    let entry_code = r#"// Auto-generated by fugue — do not edit
+fn generate_nuxtjs_entry_worker(workerd_func_dir: &Path, asset_prefix: &str) -> Result<()> {
+    let prefix_check = if asset_prefix.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "pathname.startsWith({}) || ",
+            serde_json::to_string(asset_prefix).unwrap_or_default()
+        )
+    };
+
+    let entry_code = format!(
+        r#"// Auto-generated by fugue — do not edit
 import assets from "static-assets.mjs";
 
-export default {
-  async fetch(request, env, ctx) {
+export default {{
+  async fetch(request, env, ctx) {{
     const url = new URL(request.url);
     const pathname = url.pathname;
 
     // Serve static assets for known file types
-    if (pathname.startsWith("/_nuxt/") || pathname.match(/\.(js|css|json|svg|png|jpg|jpeg|gif|ico|woff2?|ttf|eot|webp|avif|txt|xml)$/)) {
+    if ({prefix_check}pathname.match(/\.(js|css|json|svg|png|jpg|jpeg|gif|ico|woff2?|ttf|eot|webp|avif|txt|xml)$/)) {{
       const asset = assets.get(pathname);
-      if (asset) {
+      if (asset) {{
         return new Response(
           Uint8Array.from(atob(asset.data), c => c.charCodeAt(0)),
-          {
-            headers: {
+          {{
+            headers: {{
               "Content-Type": asset.mime,
               "Cache-Control": "public, max-age=31536000, immutable",
-            },
-          }
+            }},
+          }}
         );
-      }
-    }
+      }}
+    }}
 
-    try {
+    try {{
       return await env.SSR.fetch(request);
-    } catch (err) {
-      return new Response("SSR Error: " + (err instanceof Error ? err.message : String(err)), {
+    }} catch (err) {{
+      return new Response("SSR Error: " + (err instanceof Error ? err.message : String(err)), {{
         status: 500,
-        headers: { "Content-Type": "text/plain" },
-      });
-    }
-  },
-};
-"#;
+        headers: {{ "Content-Type": "text/plain" }},
+      }});
+    }}
+  }},
+}};
+"#
+    );
     let entry_path = workerd_func_dir.join("entry.mjs");
     std::fs::write(&entry_path, entry_code)?;
     Ok(())
 }
 
-fn generate_reactrouter_entry_worker(workerd_func_dir: &Path) -> Result<()> {
-    let entry_code = r#"// Auto-generated by fugue — do not edit
+fn generate_reactrouter_entry_worker(workerd_func_dir: &Path, asset_prefix: &str) -> Result<()> {
+    let prefix_guard = if asset_prefix.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "if (!pathname.startsWith({})) return await env.SSR.fetch(request);\n    ",
+            serde_json::to_string(asset_prefix).unwrap_or_default()
+        )
+    };
+
+    let entry_code = format!(
+        r#"// Auto-generated by fugue — do not edit
 import assets from "static-assets.mjs";
 
-export default {
-  async fetch(request, env, ctx) {
+export default {{
+  async fetch(request, env, ctx) {{
     const url = new URL(request.url);
     const pathname = url.pathname;
 
-    const asset = assets.get(pathname);
-    if (asset) {
+    {prefix_guard}const asset = assets.get(pathname);
+    if (asset) {{
       return new Response(
         Uint8Array.from(atob(asset.data), c => c.charCodeAt(0)),
-        {
-          headers: {
+        {{
+          headers: {{
             "Content-Type": asset.mime,
             "Cache-Control": "public, max-age=31536000, immutable",
-          },
-        }
+          }},
+        }}
       );
-    }
+    }}
 
-    try {
+    try {{
       return await env.SSR.fetch(request);
-    } catch (err) {
-      return new Response("SSR Error: " + (err instanceof Error ? err.message : String(err)), {
+    }} catch (err) {{
+      return new Response("SSR Error: " + (err instanceof Error ? err.message : String(err)), {{
         status: 500,
-        headers: { "Content-Type": "text/plain" },
-      });
-    }
-  },
-};
-"#;
+        headers: {{ "Content-Type": "text/plain" }},
+      }});
+    }}
+  }},
+}};
+"#
+    );
     let entry_path = workerd_func_dir.join("entry.mjs");
     std::fs::write(&entry_path, entry_code)?;
     Ok(())
