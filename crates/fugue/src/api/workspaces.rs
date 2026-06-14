@@ -6,7 +6,13 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use serde::Deserialize;
 use uuid::Uuid;
+
+#[derive(Deserialize)]
+pub struct DeployWorkspaceRequest {
+    pub app_id: Uuid,
+}
 
 pub async fn list_workspaces(
     State(state): State<AppState>,
@@ -44,7 +50,7 @@ pub async fn create_workspace(
 ) -> Result<impl IntoResponse, ApiError> {
     if models::Framework::from_str(&req.framework).is_none() {
         return Err(ApiError(fugue_common::error::FugueError::ValidationError(format!(
-            "Invalid framework '{}'. Must be one of: worker, nuxtjs, react-router",
+            "Invalid framework '{}'. Must be one of: worker, nuxtjs, react-router, vite",
             req.framework
         ))));
     }
@@ -63,14 +69,12 @@ pub async fn create_workspace(
 
     let mut file_count = 0i32;
     for (path, content) in &template_files {
-        if let Ok(text) = std::str::from_utf8(content) {
-            let file_path = ws_dir.join(path);
-            if let Some(parent) = file_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            std::fs::write(&file_path, text)?;
-            file_count += 1;
+        let file_path = ws_dir.join(path);
+        if let Some(parent) = file_path.parent() {
+            std::fs::create_dir_all(parent)?;
         }
+        std::fs::write(&file_path, content)?;
+        file_count += 1;
     }
 
     // Update file_count
@@ -92,22 +96,20 @@ pub async fn update_workspace(
             })?;
 
         let ws_dir = crate::config::workspaces_data_dir().join(id.to_string());
-
-        // Clear existing files and recreate
-        if ws_dir.exists() {
-            std::fs::remove_dir_all(&ws_dir)?;
-        }
         std::fs::create_dir_all(&ws_dir)?;
 
-        let mut file_count = 0i32;
+        // Update only the files provided in the request. Files not included
+        // (e.g. binary assets like images) are left untouched on disk.
         for (path, content) in &files {
             let file_path = ws_dir.join(path.trim_start_matches('/'));
             if let Some(parent) = file_path.parent() {
                 std::fs::create_dir_all(parent)?;
             }
             std::fs::write(&file_path, content)?;
-            file_count += 1;
         }
+
+        // Recalculate file count from disk so binary assets are accounted for.
+        let file_count = count_workspace_files(&ws_dir)?;
 
         let workspace = crud::update_workspace(
             &state.db,
@@ -123,6 +125,81 @@ pub async fn update_workspace(
     // Name-only update
     let workspace = crud::update_workspace(&state.db, id, req.name.as_deref(), None).await?;
     Ok(Json(workspace))
+}
+
+pub async fn deploy_workspace(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<DeployWorkspaceRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let _workspace = crud::get_workspace(&state.db, id).await?;
+    let app = crud::get_app(&state.db, req.app_id).await?;
+
+    let ws_dir = crate::config::workspaces_data_dir().join(id.to_string());
+    if !ws_dir.exists() {
+        return Err(ApiError(fugue_common::error::FugueError::ValidationError(
+            "Workspace source directory not found".to_string(),
+        )));
+    }
+
+    let app_source_dir = crate::config::apps_data_dir().join(app.id.to_string()).join("source");
+    std::fs::create_dir_all(&app_source_dir)?;
+
+    // Copy the full workspace directory (including binary assets) to the app's source directory.
+    copy_dir_recursive(&ws_dir, &app_source_dir)?;
+
+    // Update the app's source_path to point to the copied directory.
+    crud::update_app(
+        &state.db,
+        app.id,
+        None,
+        None,
+        None,
+        None,
+        Some(app_source_dir.to_str().unwrap_or("")),
+        None,
+    )
+    .await?;
+
+    let build_id = crate::api::deploy::trigger_deploy(&state, &app, app_source_dir).await?;
+
+    Ok(Json(serde_json::json!({
+        "build_id": build_id,
+        "status": "building",
+    })))
+}
+
+fn count_workspace_files(dir: &std::path::Path) -> Result<i32, fugue_common::error::FugueError> {
+    let mut count = 0i32;
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            count += count_workspace_files(&path)?;
+        } else {
+            count += 1;
+        }
+    }
+    Ok(count)
+}
+
+fn copy_dir_recursive(
+    src: &std::path::Path,
+    dst: &std::path::Path,
+) -> Result<(), fugue_common::error::FugueError> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let name = entry.file_name();
+        let dest = dst.join(&name);
+        if path.is_dir() {
+            copy_dir_recursive(&path, &dest)?;
+        } else {
+            std::fs::copy(&path, &dest)?;
+        }
+    }
+    Ok(())
 }
 
 pub async fn delete_workspace(

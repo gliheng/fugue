@@ -132,6 +132,29 @@ pub async fn update_app(
     Ok(app)
 }
 
+pub async fn update_app_framework(pool: &PgPool, id: Uuid, framework: &str) -> Result<App> {
+    let now = Utc::now();
+
+    let app = sqlx::query_as::<_, App>(
+        r#"
+        UPDATE apps SET
+            framework = $2,
+            updated_at = $3
+        WHERE id = $1
+        RETURNING *
+        "#,
+    )
+    .bind(id)
+    .bind(framework)
+    .bind(now)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| FugueError::DatabaseError(format!("Failed to update app framework: {}", e)))?
+    .ok_or_else(|| FugueError::AppNotFound(id.to_string()))?;
+
+    Ok(app)
+}
+
 pub async fn delete_app(pool: &PgPool, id: Uuid) -> Result<()> {
     let result = sqlx::query("DELETE FROM apps WHERE id = $1")
         .bind(id)

@@ -32,6 +32,7 @@ pub fn build_project(source_dir: &Path, framework: &str, skip_install: bool) -> 
         "worker" => build_worker(source_dir, &config)?,
         "nuxtjs" => build_framework(source_dir, &config, &pm, framework)?,
         "react-router" => build_framework(source_dir, &config, &pm, framework)?,
+        "vite" => build_framework(source_dir, &config, &pm, framework)?,
         _ => {
             return Err(FugueError::ValidationError(format!(
                 "Unknown framework: {}",

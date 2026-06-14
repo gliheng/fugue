@@ -12,7 +12,7 @@ pub async fn init_pool(database_url: &str) -> Result<PgPool> {
         .await
         .map_err(|e| FugueError::ConfigError(format!("Failed to connect to PostgreSQL: {}", e)))?;
 
-    sqlx::migrate!("./migrations")
+    sqlx::migrate!("../../migrations")
         .run(&pool)
         .await
         .map_err(|e| FugueError::ConfigError(format!("Failed to run migrations: {}", e)))?;

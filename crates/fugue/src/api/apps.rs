@@ -26,7 +26,7 @@ pub async fn create_app(
 
     if models::Framework::from_str(&req.framework).is_none() {
         return Err(ApiError(fugue_common::error::FugueError::ValidationError(format!(
-            "Invalid framework '{}'. Must be one of: worker, nuxtjs, react-router",
+            "Invalid framework '{}'. Must be one of: worker, nuxtjs, react-router, vite",
             req.framework
         ))));
     }

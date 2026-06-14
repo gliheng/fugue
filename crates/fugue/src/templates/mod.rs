@@ -7,6 +7,7 @@ const SKIP_DIRS: &[&str] = &[
     ".wrangler",
     ".react-router",
     "build",
+    "dist",
     ".git",
     ".mf",
     "test",
@@ -120,6 +121,16 @@ pub fn get_template_files(framework: &str) -> Result<Vec<(String, Vec<u8>)>, Str
             let mut files = Vec::new();
             walk_template_dir(&dir, &dir, &mut files)
                 .map_err(|e| format!("Failed to read react-router template: {}", e))?;
+            Ok(files)
+        }
+        "vite" => {
+            let dir = templates.join("vite-react");
+            if !dir.is_dir() {
+                return Err("Vite template not found at examples/vite-react/".to_string());
+            }
+            let mut files = Vec::new();
+            walk_template_dir(&dir, &dir, &mut files)
+                .map_err(|e| format!("Failed to read vite template: {}", e))?;
             Ok(files)
         }
         _ => Err(format!("Unknown framework: {}", framework)),

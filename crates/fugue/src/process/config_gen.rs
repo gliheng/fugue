@@ -10,7 +10,7 @@ fn has_required_artifacts(app: &App, workerd_dir: &Path) -> bool {
 
     let required_files: &[&str] = match app.framework.as_str() {
         "worker" => &["entry.mjs", "worker.js"],
-        "nuxtjs" | "react-router" => &["entry.mjs", "bundle.mjs", "static-assets.mjs"],
+        "nuxtjs" | "react-router" | "vite" => &["entry.mjs", "bundle.mjs", "static-assets.mjs"],
         _ => &[],
     };
 
@@ -114,7 +114,7 @@ fn generate_config_capnp(apps: &[&App], port: u16) -> String {
                 ));
                 workers.push(generate_worker_def(slug, &app.status));
             }
-            "nuxtjs" | "react-router" => {
+            "nuxtjs" | "react-router" | "vite" => {
                 let app_service = format!("app-{}", slug);
                 let ssr_service = format!("ssr-{}", slug);
                 let static_service = format!("static-{}", slug);

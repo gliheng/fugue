@@ -139,29 +139,60 @@ async fn listen_build_results(
         let status = if result.success { "success" } else { "failed" };
         let error_msg = result.error.as_deref();
 
+        if !result.success {
+            tracing::error!(
+                "Build {} for app {} failed: {}",
+                result.build_id,
+                result.app_id,
+                error_msg.unwrap_or("no error details")
+            );
+        }
+
         if let Err(e) = crate::db::crud::update_build(&db, result.build_id, status, None, error_msg).await {
             tracing::error!("Failed to update build status: {}", e);
             continue;
         }
 
         if result.success {
+            // Mark app as deploying while we regenerate the workerd config
+            if let Err(e) = crate::db::crud::update_app(
+                &db, result.app_id, None, None, None, Some("deploying"), None, None,
+            ).await {
+                tracing::error!("Failed to update app status to deploying: {}", e);
+            }
+
             // Generate dispatch config and reload workerd
-                if let Ok(all_apps) = crate::db::crud::list_apps(&db, None, None).await {
+            if let Ok(all_apps) = crate::db::crud::list_apps(&db, None, None).await {
                 let running_apps: Vec<_> = all_apps
                     .into_iter()
                     .filter(|a| a.id == result.app_id || a.status == "running")
                     .collect();
 
                 let mut pm = process.write().await;
-                if let Err(e) = pm.reload(&running_apps).await {
-                    tracing::error!("Failed to reload workerd: {}", e);
+                match pm.reload(&running_apps).await {
+                    Ok(_) => {
+                        if let Err(e) = crate::db::crud::update_app(
+                            &db, result.app_id, None, None, None, Some("running"), None, None,
+                        ).await {
+                            tracing::error!("Failed to update app status to running: {}", e);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to reload workerd: {}", e);
+                        if let Err(e) = crate::db::crud::update_app(
+                            &db, result.app_id, None, None, None, Some("error"), None, None,
+                        ).await {
+                            tracing::error!("Failed to update app status to error: {}", e);
+                        }
+                    }
                 }
-            }
-
-            if let Err(e) = crate::db::crud::update_app(
-                &db, result.app_id, None, None, None, Some("running"), None, None,
-            ).await {
-                tracing::error!("Failed to update app status: {}", e);
+            } else {
+                tracing::error!("Failed to list apps for workerd reload");
+                if let Err(e) = crate::db::crud::update_app(
+                    &db, result.app_id, None, None, None, Some("error"), None, None,
+                ).await {
+                    tracing::error!("Failed to update app status to error: {}", e);
+                }
             }
         } else {
             if let Err(e) = crate::db::crud::update_app(

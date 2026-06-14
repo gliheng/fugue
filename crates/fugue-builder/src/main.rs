@@ -57,19 +57,39 @@ async fn execute_build(client: &async_nats::Client, task: BuildTask) -> anyhow::
         Framework::Worker => runner::build_worker(&task).await,
         Framework::NuxtJs => runner::build_nuxtjs(&task).await,
         Framework::ReactRouter => runner::build_reactrouter(&task).await,
+        Framework::Vite => runner::build_vite(&task).await,
     };
 
     let build_result = match result {
         Ok((output_size, build_time_ms)) => {
             publish_log(client, &task.build_id, "Build succeeded", LogStream::System).await;
-            BuildResult {
-                build_id: task.build_id,
-                app_id: task.app_id,
-                success: true,
-                output_size,
-                build_time_ms,
-                error: None,
-                artifacts_path: Some(artifacts::get_artifacts_path(&task)),
+
+            match artifacts::generate_artifacts(&task) {
+                Ok(artifacts_path) => {
+                    publish_log(client, &task.build_id, "Artifacts generated", LogStream::System).await;
+                    BuildResult {
+                        build_id: task.build_id,
+                        app_id: task.app_id,
+                        success: true,
+                        output_size,
+                        build_time_ms,
+                        error: None,
+                        artifacts_path: Some(artifacts_path),
+                    }
+                }
+                Err(e) => {
+                    let error_msg = format!("Artifact generation failed: {}", e);
+                    publish_log(client, &task.build_id, &error_msg, LogStream::Stderr).await;
+                    BuildResult {
+                        build_id: task.build_id,
+                        app_id: task.app_id,
+                        success: false,
+                        output_size: 0,
+                        build_time_ms: 0,
+                        error: Some(error_msg),
+                        artifacts_path: None,
+                    }
+                }
             }
         }
         Err(e) => {

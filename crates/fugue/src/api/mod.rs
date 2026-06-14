@@ -58,6 +58,7 @@ pub fn api_router(state: AppState) -> Router {
         .route("/api/v1/workspaces", get(workspaces::list_workspaces))
         .route("/api/v1/workspaces/:id", get(workspaces::get_workspace))
         .route("/api/v1/workspaces/:id", patch(workspaces::update_workspace))
+        .route("/api/v1/workspaces/:id/deploy", post(workspaces::deploy_workspace))
         .route("/api/v1/workspaces/:id", delete(workspaces::delete_workspace))
         .with_state(state)
 }

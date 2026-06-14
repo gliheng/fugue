@@ -6,28 +6,64 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use std::path::Path as StdPath;
 use uuid::Uuid;
 
-pub async fn deploy_app(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Json(_req): Json<models::DeployRequest>,
-) -> Result<impl IntoResponse, ApiError> {
-    let app = crud::get_app(&state.db, id).await?;
+fn detect_framework(source_dir: &StdPath) -> String {
+    // Try framework-specific detectors first, falling back to worker.
+    if crate::vite::detection::detect_vite_project(source_dir).is_ok() {
+        return "vite".to_string();
+    }
+    if crate::reactrouter::detection::detect_reactrouter_project(source_dir).is_ok() {
+        return "react-router".to_string();
+    }
+    if crate::nuxtjs::detection::detect_nuxt_project(source_dir).is_ok() {
+        return "nuxtjs".to_string();
+    }
+    if crate::worker::detection::detect_worker_project(source_dir).is_ok() {
+        return "worker".to_string();
+    }
+    // If nothing matches, keep the source as a generic worker project.
+    "worker".to_string()
+}
+
+async fn maybe_update_framework(db: &sqlx::PgPool, app: &crate::db::models::App, source_dir: &StdPath) -> Result<String, fugue_common::error::FugueError> {
+    let detected = detect_framework(source_dir);
+    if detected != app.framework {
+        tracing::info!(
+            "App {} framework mismatch: stored='{}', detected='{}'; updating",
+            app.id,
+            app.framework,
+            detected
+        );
+        crud::update_app_framework(db, app.id, &detected).await?;
+        Ok(detected)
+    } else {
+        Ok(app.framework.clone())
+    }
+}
+
+pub async fn trigger_deploy(
+    state: &AppState,
+    app: &crate::db::models::App,
+    source_path: std::path::PathBuf,
+) -> Result<uuid::Uuid, fugue_common::error::FugueError> {
+    // Auto-detect framework from the uploaded source and update if mismatched.
+    let framework = maybe_update_framework(&state.db, app, &source_path).await?;
 
     // Create build record
-    let build = crud::create_build(&state.db, id).await?;
+    let build = crud::create_build(&state.db, app.id).await?;
 
     // Update app status to building
-    crud::update_app(&state.db, id, None, None, None, Some("building"), None, None).await?;
+    crud::update_app(&state.db, app.id, None, None, None, Some("building"), None, None).await?;
 
     // Publish build task to NATS
     let task = fugue_common::models::BuildTask {
         build_id: build.id,
-        app_id: id,
+        app_id: app.id,
         app_slug: app.slug.clone(),
-        source_path: crate::config::apps_data_dir().join(id.to_string()).join("source"),
-        framework: fugue_common::models::Framework::from_str(&app.framework)
+        source_path,
+        framework: fugue_common::models::Framework::from_str(&framework)
             .unwrap_or(fugue_common::models::Framework::Worker),
         skip_install: false,
     };
@@ -42,9 +78,9 @@ pub async fn deploy_app(
         let db = state.db.clone();
         let config = state.config.clone();
         let process = state.process.clone();
-        let app_id = id;
+        let app_id = app.id;
         let build_id = build.id;
-        let framework = app.framework.clone();
+        let framework = framework.clone();
         let app_name = app.name.clone();
         let app_slug = app.slug.clone();
 
@@ -83,8 +119,20 @@ pub async fn deploy_app(
         });
     }
 
+    Ok(build.id)
+}
+
+pub async fn deploy_app(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(_req): Json<models::DeployRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let app = crud::get_app(&state.db, id).await?;
+    let source_path = crate::config::apps_data_dir().join(id.to_string()).join("source");
+    let build_id = trigger_deploy(&state, &app, source_path).await?;
+
     Ok(Json(serde_json::json!({
-        "build_id": build.id,
+        "build_id": build_id,
         "status": "building",
     })))
 }
@@ -101,75 +149,11 @@ pub async fn redeploy_app(
         )));
     }
 
-    // Same as deploy but from existing source
-    let build = crud::create_build(&state.db, id).await?;
-
-    crud::update_app(&state.db, id, None, None, None, Some("building"), None, None).await?;
-
-    // Publish build task to NATS
-    let task = fugue_common::models::BuildTask {
-        build_id: build.id,
-        app_id: id,
-        app_slug: app.slug.clone(),
-        source_path: crate::config::apps_data_dir().join(id.to_string()).join("source"),
-        framework: fugue_common::models::Framework::from_str(&app.framework)
-            .unwrap_or(fugue_common::models::Framework::Worker),
-        skip_install: false,
-    };
-
-    if let Some(nats) = &state.nats {
-        let payload = serde_json::to_vec(&task)?;
-        nats.publish("fugue.build.requests", payload.into()).await
-            .map_err(|e| fugue_common::error::FugueError::NatsError(format!("Failed to publish build task: {}", e)))?;
-        tracing::info!("Published build task {} to NATS", build.id);
-    } else {
-        // Fallback to in-process build if NATS not available
-        let db = state.db.clone();
-        let config = state.config.clone();
-        let process = state.process.clone();
-        let app_id = id;
-        let build_id = build.id;
-        let framework = app.framework.clone();
-        let app_name = app.name.clone();
-        let app_slug = app.slug.clone();
-
-        tokio::spawn(async move {
-            let result =
-                run_build(&db, &config, &process, app_id, build_id, &framework, &app_name, &app_slug)
-                    .await;
-
-            match result {
-                Ok(_) => {
-                    tracing::info!("Build {} completed successfully", build_id);
-                }
-                Err(e) => {
-                    tracing::error!("Build {} failed: {:?}", build_id, e);
-                    let _ = crud::update_build(
-                        &db,
-                        build_id,
-                        "failed",
-                        None,
-                        Some(&e.to_string()),
-                    )
-                    .await;
-                    let _ = crud::update_app(
-                        &db,
-                        app_id,
-                        None,
-                        None,
-                        None,
-                        Some("error"),
-                        None,
-                        None,
-                    )
-                    .await;
-                }
-            }
-        });
-    }
+    let source_path = crate::config::apps_data_dir().join(id.to_string()).join("source");
+    let build_id = trigger_deploy(&state, &app, source_path).await?;
 
     Ok(Json(serde_json::json!({
-        "build_id": build.id,
+        "build_id": build_id,
         "status": "building",
     })))
 }
@@ -233,6 +217,14 @@ async fn run_build(
         "react-router" => {
             crate::reactrouter::validate_build_output(&source_dir)?;
             crate::runtime::generate_reactrouter_workerd_artifacts(
+                app_slug,
+                &source_dir,
+                &workerd_dir,
+            )?;
+        }
+        "vite" => {
+            crate::vite::validate_build_output(&source_dir)?;
+            crate::runtime::generate_vite_workerd_artifacts(
                 app_slug,
                 &source_dir,
                 &workerd_dir,

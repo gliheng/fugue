@@ -131,7 +131,9 @@ export default function Home() {
                             ? "lucide:route"
                             : app.framework === "nuxtjs"
                               ? "lucide:hexagon"
-                              : "lucide:file-code"
+                              : app.framework === "vite"
+                                ? "lucide:zap"
+                                : "lucide:file-code"
                         }
                         className="w-4 h-4 text-muted"
                       />

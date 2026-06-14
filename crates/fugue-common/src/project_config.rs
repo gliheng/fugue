@@ -103,6 +103,14 @@ impl ProjectConfig {
                 install_command: None,
                 build_command: None,
             },
+            "vite" => Self {
+                assets_dir: "dist/client".to_string(),
+                assets_prefix: String::new(),
+                build_output_dir: "dist".to_string(),
+                server_entry: Some("vite_app/index.js".to_string()),
+                install_command: None,
+                build_command: None,
+            },
             _ => Self {
                 assets_dir: "public".to_string(),
                 assets_prefix: String::new(),
@@ -185,6 +193,17 @@ mod tests {
         assert_eq!(cfg.assets_prefix, "");
         assert_eq!(cfg.build_output_dir, "build");
         assert_eq!(cfg.server_entry, Some("server/index.js".to_string()));
+        assert_eq!(cfg.install_command, None);
+        assert_eq!(cfg.build_command, None);
+    }
+
+    #[test]
+    fn test_vite_defaults() {
+        let cfg = ProjectConfig::for_framework("vite");
+        assert_eq!(cfg.assets_dir, "dist/client");
+        assert_eq!(cfg.assets_prefix, "");
+        assert_eq!(cfg.build_output_dir, "dist");
+        assert_eq!(cfg.server_entry, Some("vite_app/index.js".to_string()));
         assert_eq!(cfg.install_command, None);
         assert_eq!(cfg.build_command, None);
     }

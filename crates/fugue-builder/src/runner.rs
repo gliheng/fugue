@@ -15,6 +15,10 @@ pub async fn build_reactrouter(task: &BuildTask) -> Result<(u64, u128)> {
     build_and_report(task, "react-router").await
 }
 
+pub async fn build_vite(task: &BuildTask) -> Result<(u64, u128)> {
+    build_and_report(task, "vite").await
+}
+
 async fn build_and_report(task: &BuildTask, framework: &str) -> Result<(u64, u128)> {
     let result = build_project(&task.source_path,
         framework,

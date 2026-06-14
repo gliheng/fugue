@@ -11,4 +11,5 @@ pub mod reactrouter;
 pub mod runtime;
 pub mod templates;
 pub mod validation;
+pub mod vite;
 pub mod worker;

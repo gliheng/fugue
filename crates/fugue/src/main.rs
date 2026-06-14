@@ -10,6 +10,7 @@ mod reactrouter;
 mod runtime;
 mod templates;
 mod validation;
+mod vite;
 mod worker;
 
 use clap::Parser;

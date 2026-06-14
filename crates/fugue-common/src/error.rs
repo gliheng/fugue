@@ -36,6 +36,9 @@ pub enum FugueError {
     #[error("Not a React Router project: {0}")]
     NotReactRouterProject(String),
 
+    #[error("Not a Vite project: {0}")]
+    NotViteProject(String),
+
     #[error("Nuxt.js version not supported: {0}")]
     UnsupportedNuxtJsVersion(String),
 

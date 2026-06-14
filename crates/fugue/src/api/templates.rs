@@ -39,6 +39,12 @@ pub async fn list_templates() -> impl IntoResponse {
             framework: "react-router".to_string(),
             description: "React Router v7 application with SSR".to_string(),
         },
+        TemplateInfo {
+            id: "vite".to_string(),
+            name: "Vite".to_string(),
+            framework: "vite".to_string(),
+            description: "Vite SPA with Cloudflare Worker API routes".to_string(),
+        },
     ];
     Json(templates)
 }
@@ -71,6 +77,7 @@ pub async fn get_template(
         "worker" => ("Worker", "Simple Cloudflare Worker with a fetch handler"),
         "nuxtjs" => ("Nuxt.js", "Full-stack Nuxt.js application with SSR"),
         "react-router" => ("React Router", "React Router v7 application with SSR"),
+        "vite" => ("Vite", "Vite SPA with Cloudflare Worker API routes"),
         _ => ("Unknown", "Unknown template"),
     };
 

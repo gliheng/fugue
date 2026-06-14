@@ -103,8 +103,7 @@ export default function WorkspaceEditor() {
         appId = selectedAppId;
       }
 
-      await api.uploadSourceFiles(appId, sourceToUpload);
-      await api.deploy(appId);
+      await api.deployWorkspace(id!, appId);
       setDeploySuccess(appId);
       await queryClient.invalidateQueries({ queryKey: ["apps"] });
     } catch (e) {

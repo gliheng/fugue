@@ -133,6 +133,15 @@ export const api = {
     fetch(`${API_BASE}/workspaces/${id}`, { method: "DELETE" }).then((r) => {
       if (!r.ok) throw new Error(`Failed to delete workspace: ${r.status}`);
     }),
+
+  deployWorkspace: (id: string, appId: string) =>
+    fetchJSON<{ build_id: string; status: string }>(
+      `/workspaces/${id}/deploy`,
+      {
+        method: "POST",
+        body: JSON.stringify({ app_id: appId }),
+      },
+    ),
 };
 
 let cachedConfig: PlatformStatus | null = null;
