@@ -7,6 +7,7 @@ const CONFIG_FILENAME: &str = "fugue.toml";
 
 #[derive(Debug, Clone)]
 pub struct ProjectConfig {
+    pub framework: Option<String>,
     pub assets_dir: String,
     pub assets_prefix: String,
     pub build_output_dir: String,
@@ -17,6 +18,7 @@ pub struct ProjectConfig {
 
 #[derive(Debug, Clone, Deserialize, Default)]
 struct RawProjectConfig {
+    framework: Option<String>,
     assets: Option<RawAssetsConfig>,
     build: Option<RawBuildConfig>,
 }
@@ -36,23 +38,33 @@ struct RawBuildConfig {
 }
 
 impl ProjectConfig {
-    pub fn load(project_dir: &Path, framework: &str) -> Result<Self> {
-        let defaults = Self::for_framework(framework);
+    pub fn load(project_dir: &Path) -> Result<Self> {
         let config_path = project_dir.join(CONFIG_FILENAME);
 
-        if config_path.exists() {
-            let content = std::fs::read_to_string(&config_path).map_err(|e| {
-                FugueError::ConfigError(format!("Failed to read {}: {}", CONFIG_FILENAME, e))
-            })?;
-
-            let raw: RawProjectConfig = toml::from_str(&content).map_err(|e| {
-                FugueError::ConfigError(format!("Failed to parse {}: {}", CONFIG_FILENAME, e))
-            })?;
-
-            Ok(defaults.merge(raw))
-        } else {
-            Ok(defaults)
+        if !config_path.exists() {
+            return Err(FugueError::ConfigError(format!(
+                "{} not found. Create one and set `framework` to one of: worker, nuxtjs, react-router, vite",
+                CONFIG_FILENAME
+            )));
         }
+
+        let content = std::fs::read_to_string(&config_path).map_err(|e| {
+            FugueError::ConfigError(format!("Failed to read {}: {}", CONFIG_FILENAME, e))
+        })?;
+
+        let raw: RawProjectConfig = toml::from_str(&content).map_err(|e| {
+            FugueError::ConfigError(format!("Failed to parse {}: {}", CONFIG_FILENAME, e))
+        })?;
+
+        let framework = raw.framework.as_deref().ok_or_else(|| {
+            FugueError::ConfigError(format!(
+                "`framework` is required in {} (e.g., framework = \"react-router\")",
+                CONFIG_FILENAME
+            ))
+        })?;
+
+        let defaults = Self::for_framework(framework);
+        Ok(defaults.merge(raw))
     }
 
     /// Returns the install command string.
@@ -86,8 +98,10 @@ impl ProjectConfig {
     }
 
     pub fn for_framework(framework: &str) -> Self {
-        match framework {
+        let framework = Some(framework.to_string());
+        match framework.as_deref().unwrap_or("worker") {
             "nuxtjs" => Self {
+                framework,
                 assets_dir: ".output/public".to_string(),
                 assets_prefix: "/_nuxt/".to_string(),
                 build_output_dir: ".output".to_string(),
@@ -96,6 +110,7 @@ impl ProjectConfig {
                 build_command: None,
             },
             "react-router" => Self {
+                framework,
                 assets_dir: "build/client".to_string(),
                 assets_prefix: String::new(),
                 build_output_dir: "build".to_string(),
@@ -104,6 +119,7 @@ impl ProjectConfig {
                 build_command: None,
             },
             "vite" => Self {
+                framework,
                 assets_dir: "dist/client".to_string(),
                 assets_prefix: String::new(),
                 build_output_dir: "dist".to_string(),
@@ -112,6 +128,7 @@ impl ProjectConfig {
                 build_command: None,
             },
             _ => Self {
+                framework,
                 assets_dir: "public".to_string(),
                 assets_prefix: String::new(),
                 build_output_dir: ".".to_string(),
@@ -130,6 +147,7 @@ impl ProjectConfig {
             .unwrap_or(self.assets_prefix);
 
         Self {
+            framework: raw.framework.or(self.framework),
             assets_dir: raw
                 .assets
                 .as_ref()
@@ -167,6 +185,7 @@ mod tests {
     #[test]
     fn test_worker_defaults() {
         let cfg = ProjectConfig::for_framework("worker");
+        assert_eq!(cfg.framework, Some("worker".to_string()));
         assert_eq!(cfg.assets_dir, "public");
         assert_eq!(cfg.assets_prefix, "");
         assert_eq!(cfg.build_output_dir, ".");
@@ -178,6 +197,7 @@ mod tests {
     #[test]
     fn test_nuxtjs_defaults() {
         let cfg = ProjectConfig::for_framework("nuxtjs");
+        assert_eq!(cfg.framework, Some("nuxtjs".to_string()));
         assert_eq!(cfg.assets_dir, ".output/public");
         assert_eq!(cfg.assets_prefix, "/_nuxt/");
         assert_eq!(cfg.build_output_dir, ".output");
@@ -189,6 +209,7 @@ mod tests {
     #[test]
     fn test_reactrouter_defaults() {
         let cfg = ProjectConfig::for_framework("react-router");
+        assert_eq!(cfg.framework, Some("react-router".to_string()));
         assert_eq!(cfg.assets_dir, "build/client");
         assert_eq!(cfg.assets_prefix, "");
         assert_eq!(cfg.build_output_dir, "build");
@@ -200,6 +221,7 @@ mod tests {
     #[test]
     fn test_vite_defaults() {
         let cfg = ProjectConfig::for_framework("vite");
+        assert_eq!(cfg.framework, Some("vite".to_string()));
         assert_eq!(cfg.assets_dir, "dist/client");
         assert_eq!(cfg.assets_prefix, "");
         assert_eq!(cfg.build_output_dir, "dist");
@@ -211,6 +233,7 @@ mod tests {
     #[test]
     fn test_unknown_framework_uses_worker_defaults() {
         let cfg = ProjectConfig::for_framework("unknown");
+        assert_eq!(cfg.framework, Some("unknown".to_string()));
         assert_eq!(cfg.assets_dir, "public");
         assert_eq!(cfg.assets_prefix, "");
         assert_eq!(cfg.build_output_dir, ".");
@@ -223,6 +246,7 @@ mod tests {
     fn test_merge_partial_override() {
         let defaults = ProjectConfig::for_framework("nuxtjs");
         let raw = RawProjectConfig {
+            framework: None,
             assets: Some(RawAssetsConfig {
                 dir: Some("dist/static".to_string()),
                 prefix: None,
@@ -248,13 +272,12 @@ mod tests {
     }
 
     #[test]
-    fn test_load_from_dir_no_file() {
+    fn test_load_from_dir_no_file_fails() {
         let dir = std::env::temp_dir().join("fugue-test-no-config");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
-        let cfg = ProjectConfig::load(&dir, "nuxtjs").unwrap();
-        assert_eq!(cfg.assets_dir, ".output/public");
+        assert!(ProjectConfig::load(&dir).is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -267,11 +290,11 @@ mod tests {
 
         std::fs::write(
             dir.join("fugue.toml"),
-            "[assets]\ndir = \"static\"\nprefix = \"/assets/\"\n",
+            "framework = \"nuxtjs\"\n[assets]\ndir = \"static\"\nprefix = \"/assets/\"\n",
         )
         .unwrap();
 
-        let cfg = ProjectConfig::load(&dir, "nuxtjs").unwrap();
+        let cfg = ProjectConfig::load(&dir).unwrap();
         assert_eq!(cfg.assets_dir, "static");
         assert_eq!(cfg.assets_prefix, "/assets/");
         assert_eq!(cfg.build_output_dir, ".output");
@@ -286,9 +309,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
-        std::fs::write(dir.join("fugue.toml"), "[build]\noutput_dir = \"dist\"\n").unwrap();
+        std::fs::write(dir.join("fugue.toml"), "framework = \"react-router\"\n[build]\noutput_dir = \"dist\"\n").unwrap();
 
-        let cfg = ProjectConfig::load(&dir, "react-router").unwrap();
+        let cfg = ProjectConfig::load(&dir).unwrap();
         assert_eq!(cfg.assets_dir, "build/client");
         assert_eq!(cfg.assets_prefix, "");
         assert_eq!(cfg.build_output_dir, "dist");
@@ -305,11 +328,11 @@ mod tests {
 
         std::fs::write(
             dir.join("fugue.toml"),
-            "[build]\ncommand = \"npm run build:staging\"\n",
+            "framework = \"nuxtjs\"\n[build]\ncommand = \"npm run build:staging\"\n",
         )
         .unwrap();
 
-        let cfg = ProjectConfig::load(&dir, "nuxtjs").unwrap();
+        let cfg = ProjectConfig::load(&dir).unwrap();
         assert_eq!(cfg.build_command, Some("npm run build:staging".to_string()));
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -340,11 +363,11 @@ mod tests {
 
         std::fs::write(
             dir.join("fugue.toml"),
-            "[build]\ninstall = \"pnpm install --frozen-lockfile\"\n",
+            "framework = \"nuxtjs\"\n[build]\ninstall = \"pnpm install --frozen-lockfile\"\n",
         )
         .unwrap();
 
-        let cfg = ProjectConfig::load(&dir, "nuxtjs").unwrap();
+        let cfg = ProjectConfig::load(&dir).unwrap();
         assert_eq!(cfg.install_command, Some("pnpm install --frozen-lockfile".to_string()));
 
         let _ = std::fs::remove_dir_all(&dir);

@@ -80,6 +80,15 @@ impl ProcessManager {
     pub async fn reload(&mut self, apps: &[App]) -> Result<()> {
         config_gen::generate_dispatch_config(apps, &self.workerd_dir, self.workerd_port)?;
 
+        if self.process.is_none() {
+            // workerd isn't running yet; start it now
+            self.spawn_workerd().await?;
+            self.wait_for_healthy(std::time::Duration::from_secs(10))
+                .await?;
+            tracing::info!("workerd process started on port {}", self.workerd_port);
+            return Ok(());
+        }
+
         if self.watch_mode {
             // Touch config file to trigger workerd --watch reload
             let now = filetime::FileTime::now();

@@ -58,7 +58,7 @@ pub fn detect_reactrouter_project(project_dir: &Path) -> Result<ReactRouterProje
 }
 
 pub fn validate_build_output(project_dir: &Path) -> Result<()> {
-    let config = ProjectConfig::load(project_dir, "react-router")?;
+    let config = ProjectConfig::load(project_dir)?;
     let build_dir = project_dir.join(&config.build_output_dir);
 
     if !build_dir.exists() {
@@ -80,7 +80,7 @@ pub fn validate_build_output(project_dir: &Path) -> Result<()> {
         .server_entry
         .as_deref()
         .unwrap_or("server/index.js");
-    let index_file = server_dir.join(server_entry);
+    let index_file = build_dir.join(server_entry);
     if !index_file.exists() {
         return Err(FugueError::BuildError(format!(
             "{}/{} not found",
@@ -89,4 +89,23 @@ pub fn validate_build_output(project_dir: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_build_output_finds_server_entry() {
+        let dir = std::env::temp_dir().join("fugue-test-reactrouter-validate-output");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("build/server")).unwrap();
+        std::fs::write(dir.join("build/server/index.js"), "export default {};")
+            .unwrap();
+        std::fs::write(dir.join("fugue.toml"), "framework = \"react-router\"\n").unwrap();
+
+        validate_build_output(&dir).expect("validation should pass for default React Router output");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

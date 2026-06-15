@@ -68,7 +68,7 @@ pub fn detect_vite_project(project_dir: &Path) -> Result<ViteProjectInfo> {
 }
 
 pub fn validate_build_output(project_dir: &Path) -> Result<()> {
-    let config = ProjectConfig::load(project_dir, "vite")?;
+    let config = ProjectConfig::load(project_dir)?;
     let output_dir = project_dir.join(&config.build_output_dir);
 
     if !output_dir.exists() {

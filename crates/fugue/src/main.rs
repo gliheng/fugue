@@ -37,7 +37,7 @@ async fn run(cli: Cli) -> fugue_common::error::Result<()> {
         }
         Commands::Status => {
             let config = config::PlatformConfig::load()?;
-            let client = client::DaemonClient::new_with_port(config.platform.port);
+            let client = client::DaemonClient::new_with_port(config.workerd.port);
             match client.status().await {
                 Ok(status) => {
                     println!("Platform Status:");
@@ -56,7 +56,7 @@ async fn run(cli: Cli) -> fugue_common::error::Result<()> {
             description,
         } => {
             let config = config::PlatformConfig::load()?;
-            let client = client::DaemonClient::new_with_port(config.platform.port);
+            let client = client::DaemonClient::new_with_port(config.workerd.port);
             let app = client.create_app(&name, &framework, description.as_deref()).await?;
             println!("App created:");
             println!("  ID: {}", app.id);
@@ -67,7 +67,7 @@ async fn run(cli: Cli) -> fugue_common::error::Result<()> {
             println!("  Status: {}", app.status);
             println!(
                 "  URL: http://{}.{}:{}",
-                app.subdomain, config.platform.domain, config.platform.port
+                app.subdomain, config.platform.domain, config.workerd.port
             );
             Ok(())
         }
@@ -78,7 +78,7 @@ async fn run(cli: Cli) -> fugue_common::error::Result<()> {
             env: _,
         } => {
             let config = config::PlatformConfig::load()?;
-            let client = client::DaemonClient::new_with_port(config.platform.port);
+            let client = client::DaemonClient::new_with_port(config.workerd.port);
             let app = client.get_app_by_name(&name).await?;
 
             println!("Deploying app '{}' ({})...", app.name, app.id);
@@ -114,7 +114,7 @@ async fn run(cli: Cli) -> fugue_common::error::Result<()> {
         }
         Commands::List => {
             let config = config::PlatformConfig::load()?;
-            let client = client::DaemonClient::new_with_port(config.platform.port);
+            let client = client::DaemonClient::new_with_port(config.workerd.port);
             let apps = client.list_apps().await?;
 
             if apps.is_empty() {
@@ -129,7 +129,7 @@ async fn run(cli: Cli) -> fugue_common::error::Result<()> {
                     );
                     println!(
                         "    URL: http://{}.{}:{}",
-                        app.subdomain, config.platform.domain, config.platform.port
+                        app.subdomain, config.platform.domain, config.workerd.port
                     );
                     println!("    Created: {}", app.created_at);
                     println!();
@@ -139,7 +139,7 @@ async fn run(cli: Cli) -> fugue_common::error::Result<()> {
         }
         Commands::Info { name } => {
             let config = config::PlatformConfig::load()?;
-            let client = client::DaemonClient::new_with_port(config.platform.port);
+            let client = client::DaemonClient::new_with_port(config.workerd.port);
             let app = client.get_app_by_name(&name).await?;
 
             println!("App: {}", app.name);
@@ -150,7 +150,7 @@ async fn run(cli: Cli) -> fugue_common::error::Result<()> {
             println!("  Status: {}", app.status);
             println!(
                 "  URL: http://{}.{}:{}",
-                app.subdomain, config.platform.domain, config.platform.port
+                app.subdomain, config.platform.domain, config.workerd.port
             );
             if let Some(desc) = &app.description {
                 println!("  Description: {}", desc);
@@ -161,7 +161,7 @@ async fn run(cli: Cli) -> fugue_common::error::Result<()> {
         }
         Commands::Delete { name } => {
             let config = config::PlatformConfig::load()?;
-            let client = client::DaemonClient::new_with_port(config.platform.port);
+            let client = client::DaemonClient::new_with_port(config.workerd.port);
             let app = client.get_app_by_name(&name).await?;
             client.delete_app(&app.id).await?;
             println!("App '{}' deleted", name);
@@ -169,13 +169,13 @@ async fn run(cli: Cli) -> fugue_common::error::Result<()> {
         }
         Commands::Url { name } => {
             let config = config::PlatformConfig::load()?;
-            let client = client::DaemonClient::new_with_port(config.platform.port);
+            let client = client::DaemonClient::new_with_port(config.workerd.port);
             let app = client.get_app_by_name(&name).await?;
 
             if app.status == "running" {
                 println!(
                     "http://{}.{}:{}",
-                    app.subdomain, config.platform.domain, config.platform.port
+                    app.subdomain, config.platform.domain, config.workerd.port
                 );
             } else {
                 println!("App '{}' is not running (status: {})", name, app.status);
@@ -189,7 +189,7 @@ async fn run(cli: Cli) -> fugue_common::error::Result<()> {
         }
         Commands::StartApp { name } => {
             let config = config::PlatformConfig::load()?;
-            let client = client::DaemonClient::new_with_port(config.platform.port);
+            let client = client::DaemonClient::new_with_port(config.workerd.port);
             let app = client.get_app_by_name(&name).await?;
             let result = client.start_app(&app.id).await?;
             println!("App '{}' started", name);
@@ -200,7 +200,7 @@ async fn run(cli: Cli) -> fugue_common::error::Result<()> {
         }
         Commands::StopApp { name } => {
             let config = config::PlatformConfig::load()?;
-            let client = client::DaemonClient::new_with_port(config.platform.port);
+            let client = client::DaemonClient::new_with_port(config.workerd.port);
             let app = client.get_app_by_name(&name).await?;
             client.stop_app(&app.id).await?;
             println!("App '{}' stopped", name);

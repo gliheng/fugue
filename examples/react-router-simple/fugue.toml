@@ -1,3 +1,5 @@
+framework = "react-router"
+
 [assets]
 dir = "build/client"
 prefix = ""

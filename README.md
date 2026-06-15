@@ -44,7 +44,21 @@ fugue deploy hello examples/hello.js
 fugue deploy my-nuxt-app examples/nuxtjs-simple/
 ```
 
-Fugue auto-detects Nuxt.js projects, builds them, generates workerd artifacts (esbuild bundle + static assets + Cap'n Proto config), and deploys.
+Each project must include a `fugue.toml` with the `framework` set:
+
+```toml
+framework = "nuxtjs"
+
+[assets]
+dir = ".output/public"
+prefix = "/_nuxt/"
+
+[build]
+output_dir = ".output"
+server_entry = "server/index.mjs"
+```
+
+Fugue reads `fugue.toml`, builds the project, generates workerd artifacts (esbuild bundle + static assets + Cap'n Proto config), and deploys.
 
 ### Invoke a function
 ```bash
@@ -95,6 +109,12 @@ export default defineNuxtConfig({
     cloudflare: { deployConfig: true, nodeCompat: true }
   }
 })
+```
+
+Add `fugue.toml`:
+
+```toml
+framework = "nuxtjs"
 ```
 
 The deploy command:

@@ -35,7 +35,7 @@ fn generate_worker_artifacts(
     source_dir: &Path,
     workerd_dir: &Path,
 ) -> Result<PathBuf> {
-    let config = ProjectConfig::load(source_dir, "worker")?;
+    let config = ProjectConfig::load(source_dir)?;
 
     let worker_js = source_dir.join("worker.js");
     if !worker_js.exists() {
@@ -80,13 +80,13 @@ fn generate_nuxtjs_artifacts(
     source_dir: &Path,
     workerd_dir: &Path,
 ) -> Result<PathBuf> {
-    let config = ProjectConfig::load(source_dir, "nuxtjs")?;
+    let config = ProjectConfig::load(source_dir)?;
     let output_dir = source_dir.join(&config.build_output_dir);
-    let server_dir = output_dir.join("server");
     let public_dir = source_dir.join(&config.assets_dir);
 
     let server_entry = config.server_entry.as_deref().unwrap_or("server/index.mjs");
-    if !server_dir.join(server_entry).exists() {
+    let server_entry_path = output_dir.join(server_entry);
+    if !server_entry_path.exists() {
         return Err(FugueError::BuildError(format!(
             "{}/{} not found",
             config.build_output_dir, server_entry
@@ -104,7 +104,7 @@ fn generate_nuxtjs_artifacts(
         "Bundling SSR server with esbuild for '{}'...",
         function_name
     );
-    bundle_server_with_esbuild(&server_dir, &workerd_func_dir)?;
+    bundle_server_with_esbuild(&server_entry_path, &workerd_func_dir)?;
 
     tracing::info!("Generating entry worker for '{}'...", function_name);
     generate_nuxtjs_entry_worker(&workerd_func_dir, &config.assets_prefix)?;
@@ -123,13 +123,13 @@ fn generate_reactrouter_artifacts(
     source_dir: &Path,
     workerd_dir: &Path,
 ) -> Result<PathBuf> {
-    let config = ProjectConfig::load(source_dir, "react-router")?;
+    let config = ProjectConfig::load(source_dir)?;
     let output_dir = source_dir.join(&config.build_output_dir);
-    let server_dir = output_dir.join("server");
     let client_dir = source_dir.join(&config.assets_dir);
 
     let server_entry = config.server_entry.as_deref().unwrap_or("server/index.js");
-    if !server_dir.join(server_entry).exists() {
+    let server_entry_path = output_dir.join(server_entry);
+    if !server_entry_path.exists() {
         return Err(FugueError::BuildError(format!(
             "{}/{} not found",
             config.build_output_dir, server_entry
@@ -144,7 +144,7 @@ fn generate_reactrouter_artifacts(
     tracing::info!("Embedded {} static assets", assets_count);
 
     tracing::info!("Bundling server with esbuild for '{}'...", function_name);
-    bundle_server_with_esbuild(&server_dir, &workerd_func_dir)?;
+    bundle_server_with_esbuild(&server_entry_path, &workerd_func_dir)?;
 
     tracing::info!("Generating entry worker for '{}'...", function_name);
     generate_reactrouter_entry_worker(&workerd_func_dir, &config.assets_prefix)?;
@@ -163,7 +163,7 @@ fn generate_vite_artifacts(
     source_dir: &Path,
     workerd_dir: &Path,
 ) -> Result<PathBuf> {
-    let config = ProjectConfig::load(source_dir, "vite")?;
+    let config = ProjectConfig::load(source_dir)?;
     let output_dir = source_dir.join(&config.build_output_dir);
     let client_dir = source_dir.join(&config.assets_dir);
 
@@ -418,20 +418,14 @@ fn walk_and_embed(
     Ok(())
 }
 
-fn bundle_server_with_esbuild(server_dir: &Path, workerd_func_dir: &Path) -> Result<()> {
-    let index_mjs = server_dir.join("index.mjs");
-    let index_js = server_dir.join("index.js");
+fn bundle_server_with_esbuild(server_entry: &Path, workerd_func_dir: &Path) -> Result<()> {
     let bundle_out = workerd_func_dir.join("bundle.mjs");
 
-    let entry = if index_mjs.exists() {
-        index_mjs
-    } else if index_js.exists() {
-        index_js
-    } else {
+    if !server_entry.exists() {
         return Err(FugueError::BuildError(
-            "No server entry point found (index.mjs or index.js)".to_string(),
+            "No server entry point found".to_string(),
         ));
-    };
+    }
 
     let esbuild_bin = fugue_common::fs::find_esbuild()?;
 
@@ -444,7 +438,7 @@ fn bundle_server_with_esbuild(server_dir: &Path, workerd_func_dir: &Path) -> Res
     };
 
     let output = cmd
-        .arg(&entry)
+        .arg(&server_entry)
         .arg("--bundle")
         .arg("--format=esm")
         .arg(format!("--outfile={}", bundle_out.display()))

@@ -1,6 +1,7 @@
 use crate::api::{ApiError, AppState};
 use crate::db::crud;
 use fugue_common::models;
+use fugue_common::project_config::ProjectConfig;
 use axum::{
     extract::{Path, State, WebSocketUpgrade},
     response::IntoResponse,
@@ -9,35 +10,26 @@ use axum::{
 use std::path::Path as StdPath;
 use uuid::Uuid;
 
-fn detect_framework(source_dir: &StdPath) -> String {
-    // Try framework-specific detectors first, falling back to worker.
-    if crate::vite::detection::detect_vite_project(source_dir).is_ok() {
-        return "vite".to_string();
-    }
-    if crate::reactrouter::detection::detect_reactrouter_project(source_dir).is_ok() {
-        return "react-router".to_string();
-    }
-    if crate::nuxtjs::detection::detect_nuxt_project(source_dir).is_ok() {
-        return "nuxtjs".to_string();
-    }
-    if crate::worker::detection::detect_worker_project(source_dir).is_ok() {
-        return "worker".to_string();
-    }
-    // If nothing matches, keep the source as a generic worker project.
-    "worker".to_string()
-}
+const SUPPORTED_FRAMEWORKS: &[&str] = &["worker", "nuxtjs", "react-router", "vite"];
 
 async fn maybe_update_framework(db: &sqlx::PgPool, app: &crate::db::models::App, source_dir: &StdPath) -> Result<String, fugue_common::error::FugueError> {
-    let detected = detect_framework(source_dir);
-    if detected != app.framework {
+    let config = ProjectConfig::load(source_dir)?;
+    let configured = config.framework.unwrap_or_else(|| "worker".to_string());
+    if !SUPPORTED_FRAMEWORKS.contains(&configured.as_str()) {
+        return Err(fugue_common::error::FugueError::ValidationError(format!(
+            "Unsupported framework '{}' in fugue.toml. Supported: worker, nuxtjs, react-router, vite",
+            configured
+        )));
+    }
+    if configured != app.framework {
         tracing::info!(
-            "App {} framework mismatch: stored='{}', detected='{}'; updating",
+            "App {} framework mismatch: stored='{}', configured='{}'; updating",
             app.id,
             app.framework,
-            detected
+            configured
         );
-        crud::update_app_framework(db, app.id, &detected).await?;
-        Ok(detected)
+        crud::update_app_framework(db, app.id, &configured).await?;
+        Ok(configured)
     } else {
         Ok(app.framework.clone())
     }

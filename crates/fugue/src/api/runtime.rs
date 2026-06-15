@@ -41,7 +41,7 @@ pub async fn start_app(
 
     let url = format!(
         "http://{}.{}:{}",
-        app.subdomain, state.config.platform.domain, state.config.platform.port
+        app.subdomain, state.config.platform.domain, state.config.workerd.port
     );
 
     Ok(Json(serde_json::json!({
@@ -89,7 +89,7 @@ pub async fn app_status(
     let url = if app.status == "running" {
         Some(format!(
             "http://{}.{}:{}",
-            app.subdomain, state.config.platform.domain, state.config.platform.port
+            app.subdomain, state.config.platform.domain, state.config.workerd.port
         ))
     } else {
         None

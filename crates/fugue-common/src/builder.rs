@@ -14,7 +14,8 @@ pub struct BuildResult {
 pub fn build_project(source_dir: &Path, framework: &str, skip_install: bool) -> Result<BuildResult> {
     let start_time = std::time::Instant::now();
     let pm = PackageManager::detect(source_dir);
-    let config = ProjectConfig::load(source_dir, framework)?;
+    let config = ProjectConfig::load(source_dir)?;
+    let framework = config.framework.as_deref().unwrap_or(framework);
 
     info!("Detected package manager: {:?}", pm);
 

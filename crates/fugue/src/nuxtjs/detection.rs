@@ -104,7 +104,7 @@ fn is_nuxt_3_or_higher(version: &str) -> bool {
 }
 
 pub fn validate_build_output(project_dir: &Path) -> Result<()> {
-    let config = ProjectConfig::load(project_dir, "nuxtjs")?;
+    let config = ProjectConfig::load(project_dir)?;
     let output_dir = project_dir.join(&config.build_output_dir);
 
     if !output_dir.exists() {
@@ -126,7 +126,7 @@ pub fn validate_build_output(project_dir: &Path) -> Result<()> {
         .server_entry
         .as_deref()
         .unwrap_or("server/index.mjs");
-    let index_file = server_dir.join(server_entry);
+    let index_file = output_dir.join(server_entry);
     if !index_file.exists() {
         return Err(FugueError::BuildError(format!(
             "{}/{} not found. This is the Nitro server entry point.",
@@ -150,5 +150,19 @@ mod tests {
         assert!(is_nuxt_3_or_higher("4.0.0"));
         assert!(!is_nuxt_3_or_higher("2.17.0"));
         assert!(!is_nuxt_3_or_higher("^2.15.0"));
+    }
+
+    #[test]
+    fn test_validate_build_output_finds_nitro_entry() {
+        let dir = std::env::temp_dir().join("fugue-test-nuxt-validate-output");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".output/server")).unwrap();
+        std::fs::write(dir.join(".output/server/index.mjs"), "export default {};")
+            .unwrap();
+        std::fs::write(dir.join("fugue.toml"), "framework = \"nuxtjs\"\n").unwrap();
+
+        validate_build_output(&dir).expect("validation should pass for default Nuxt output");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
