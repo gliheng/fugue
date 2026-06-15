@@ -1,0 +1,8 @@
+[build]
+command = "npm run build"
+output_dir = "dist"
+server_entry = "vite_vue/index.js"
+
+[assets]
+dir = "dist/client"
+prefix = ""
