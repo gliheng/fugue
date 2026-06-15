@@ -40,10 +40,16 @@ pub async fn list_templates() -> impl IntoResponse {
             description: "React Router v7 application with SSR".to_string(),
         },
         TemplateInfo {
-            id: "vite".to_string(),
-            name: "Vite".to_string(),
+            id: "vite-react".to_string(),
+            name: "Vite React".to_string(),
             framework: "vite".to_string(),
-            description: "Vite SPA with Cloudflare Worker API routes".to_string(),
+            description: "Vite SPA with React and Cloudflare Worker API routes".to_string(),
+        },
+        TemplateInfo {
+            id: "vite-vue".to_string(),
+            name: "Vite Vue".to_string(),
+            framework: "vite".to_string(),
+            description: "Vite SPA with Vue and Cloudflare Worker API routes".to_string(),
         },
     ];
     Json(templates)
@@ -65,7 +71,9 @@ pub async fn get_template(
     let mut files = std::collections::HashMap::new();
     for (path, content) in raw_files {
         match String::from_utf8(content) {
-            Ok(text) => { files.insert(path, text); }
+            Ok(text) => {
+                files.insert(path, text);
+            }
             Err(e) => {
                 let len = e.into_bytes().len();
                 files.insert(path, format!("<binary file, {} bytes>", len));
@@ -77,7 +85,14 @@ pub async fn get_template(
         "worker" => ("Worker", "Simple Cloudflare Worker with a fetch handler"),
         "nuxtjs" => ("Nuxt.js", "Full-stack Nuxt.js application with SSR"),
         "react-router" => ("React Router", "React Router v7 application with SSR"),
-        "vite" => ("Vite", "Vite SPA with Cloudflare Worker API routes"),
+        "vite-react" | "vite" => (
+            "Vite React",
+            "Vite SPA with React and Cloudflare Worker API routes",
+        ),
+        "vite-vue" => (
+            "Vite Vue",
+            "Vite SPA with Vue and Cloudflare Worker API routes",
+        ),
         _ => ("Unknown", "Unknown template"),
     };
 

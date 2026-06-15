@@ -7,6 +7,7 @@ import type { App } from "../lib/types";
 const frameworkIcons: Record<string, string> = {
   "react-router": "lucide:route",
   nuxtjs: "lucide:nuxt",
+  vite: "lucide:zap",
   "worker": "lucide:file-code",
 };
 

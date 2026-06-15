@@ -14,9 +14,7 @@ pub struct DeployWorkspaceRequest {
     pub app_id: Uuid,
 }
 
-pub async fn list_workspaces(
-    State(state): State<AppState>,
-) -> Result<impl IntoResponse, ApiError> {
+pub async fn list_workspaces(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
     let workspaces = crud::list_workspaces(&state.db).await?;
     Ok(Json(workspaces))
 }
@@ -48,23 +46,31 @@ pub async fn create_workspace(
     State(state): State<AppState>,
     Json(req): Json<models::CreateWorkspaceRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    if models::Framework::from_str(&req.framework).is_none() {
-        return Err(ApiError(fugue_common::error::FugueError::ValidationError(format!(
-            "Invalid framework '{}'. Must be one of: worker, nuxtjs, react-router, vite",
-            req.framework
-        ))));
-    }
+    // Vite template aliases share the same runtime framework. Everything else must be a
+    // known framework enum value.
+    let (framework, template_id) = match req.framework.as_str() {
+        "vite-react" | "vite-vue" => ("vite", req.framework.as_str()),
+        other => {
+            if models::Framework::from_str(other).is_none() {
+                return Err(ApiError(fugue_common::error::FugueError::ValidationError(format!(
+                    "Invalid framework '{}'. Must be one of: worker, nuxtjs, react-router, vite, vite-react, vite-vue",
+                    req.framework
+                ))));
+            }
+            (other, other)
+        }
+    };
 
     let name = req.name.unwrap_or_else(|| crud::generate_workspace_name());
 
     // Create workspace record first (file_count = 0)
-    let workspace = crud::create_workspace(&state.db, &name, &req.framework, 0).await?;
+    let workspace = crud::create_workspace(&state.db, &name, framework, 0).await?;
 
     // Write template files to disk
     let ws_dir = crate::config::workspaces_data_dir().join(workspace.id.to_string());
     std::fs::create_dir_all(&ws_dir)?;
 
-    let template_files = crate::templates::get_template_files(&req.framework)
+    let template_files = crate::templates::get_template_files(template_id)
         .map_err(|e| fugue_common::error::FugueError::ValidationError(e))?;
 
     let mut file_count = 0i32;
@@ -92,7 +98,10 @@ pub async fn update_workspace(
     if let Some(ref files_value) = req.files {
         let files: std::collections::HashMap<String, String> =
             serde_json::from_value(files_value.clone()).map_err(|e| {
-                fugue_common::error::FugueError::ValidationError(format!("Invalid files format: {}", e))
+                fugue_common::error::FugueError::ValidationError(format!(
+                    "Invalid files format: {}",
+                    e
+                ))
             })?;
 
         let ws_dir = crate::config::workspaces_data_dir().join(id.to_string());
@@ -111,13 +120,8 @@ pub async fn update_workspace(
         // Recalculate file count from disk so binary assets are accounted for.
         let file_count = count_workspace_files(&ws_dir)?;
 
-        let workspace = crud::update_workspace(
-            &state.db,
-            id,
-            req.name.as_deref(),
-            Some(file_count),
-        )
-        .await?;
+        let workspace =
+            crud::update_workspace(&state.db, id, req.name.as_deref(), Some(file_count)).await?;
 
         return Ok(Json(workspace));
     }
@@ -142,7 +146,9 @@ pub async fn deploy_workspace(
         )));
     }
 
-    let app_source_dir = crate::config::apps_data_dir().join(app.id.to_string()).join("source");
+    let app_source_dir = crate::config::apps_data_dir()
+        .join(app.id.to_string())
+        .join("source");
     std::fs::create_dir_all(&app_source_dir)?;
 
     // Copy the full workspace directory (including binary assets) to the app's source directory.

@@ -33,8 +33,7 @@ pub fn detect_vite_project(project_dir: &Path) -> Result<ViteProjectInfo> {
 
     let has_cloudflare_vite_plugin = package_json["dependencies"]["@cloudflare/vite-plugin"]
         .is_string()
-        || package_json["devDependencies"]["@cloudflare/vite-plugin"]
-            .is_string();
+        || package_json["devDependencies"]["@cloudflare/vite-plugin"].is_string();
 
     if !has_cloudflare_vite_plugin {
         return Err(FugueError::NotViteProject(
@@ -48,8 +47,8 @@ pub fn detect_vite_project(project_dir: &Path) -> Result<ViteProjectInfo> {
         .unwrap_or("unknown")
         .to_string();
 
-    let has_wrangler = project_dir.join("wrangler.jsonc").exists()
-        || project_dir.join("wrangler.json").exists();
+    let has_wrangler =
+        project_dir.join("wrangler.jsonc").exists() || project_dir.join("wrangler.json").exists();
 
     if !has_wrangler {
         return Err(FugueError::NotViteProject(
@@ -75,14 +74,6 @@ pub fn validate_build_output(project_dir: &Path) -> Result<()> {
     if !output_dir.exists() {
         return Err(FugueError::BuildError(format!(
             "{} directory not found. Did the build succeed?",
-            config.build_output_dir
-        )));
-    }
-
-    let worker_dir = output_dir.join("vite_app");
-    if !worker_dir.exists() {
-        return Err(FugueError::BuildError(format!(
-            "{}/vite_app directory not found",
             config.build_output_dir
         )));
     }

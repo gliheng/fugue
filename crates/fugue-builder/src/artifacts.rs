@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
+use fugue_common::config;
 use fugue_common::error::{FugueError, Result};
 use fugue_common::models::{BuildTask, Framework};
-use fugue_common::config;
 use fugue_common::project_config::ProjectConfig;
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64;
 use std::path::{Path, PathBuf};
 
 pub fn get_artifacts_path(task: &BuildTask) -> PathBuf {
@@ -17,9 +17,15 @@ pub fn generate_artifacts(task: &BuildTask) -> Result<PathBuf> {
     let workerd_dir = config::workerd_dir();
 
     match task.framework {
-        Framework::Worker => generate_worker_artifacts(&task.app_slug, &task.source_path, &workerd_dir),
-        Framework::NuxtJs => generate_nuxtjs_artifacts(&task.app_slug, &task.source_path, &workerd_dir),
-        Framework::ReactRouter => generate_reactrouter_artifacts(&task.app_slug, &task.source_path, &workerd_dir),
+        Framework::Worker => {
+            generate_worker_artifacts(&task.app_slug, &task.source_path, &workerd_dir)
+        }
+        Framework::NuxtJs => {
+            generate_nuxtjs_artifacts(&task.app_slug, &task.source_path, &workerd_dir)
+        }
+        Framework::ReactRouter => {
+            generate_reactrouter_artifacts(&task.app_slug, &task.source_path, &workerd_dir)
+        }
         Framework::Vite => generate_vite_artifacts(&task.app_slug, &task.source_path, &workerd_dir),
     }
 }
@@ -51,7 +57,10 @@ fn generate_worker_artifacts(
         copy_public_dir(&public_dir, &dest_dir)?;
         tracing::info!("Copied static assets to {:?}", dest_dir);
     } else {
-        tracing::info!("No public directory found for '{}', skipping static assets", function_name);
+        tracing::info!(
+            "No public directory found for '{}', skipping static assets",
+            function_name
+        );
     }
 
     tracing::info!("Generating entry worker for '{}'...", function_name);
@@ -76,10 +85,7 @@ fn generate_nuxtjs_artifacts(
     let server_dir = output_dir.join("server");
     let public_dir = source_dir.join(&config.assets_dir);
 
-    let server_entry = config
-        .server_entry
-        .as_deref()
-        .unwrap_or("server/index.mjs");
+    let server_entry = config.server_entry.as_deref().unwrap_or("server/index.mjs");
     if !server_dir.join(server_entry).exists() {
         return Err(FugueError::BuildError(format!(
             "{}/{} not found",
@@ -94,7 +100,10 @@ fn generate_nuxtjs_artifacts(
     let assets_count = embed_static_assets(&public_dir, &workerd_func_dir)?;
     tracing::info!("Embedded {} static assets", assets_count);
 
-    tracing::info!("Bundling SSR server with esbuild for '{}'...", function_name);
+    tracing::info!(
+        "Bundling SSR server with esbuild for '{}'...",
+        function_name
+    );
     bundle_server_with_esbuild(&server_dir, &workerd_func_dir)?;
 
     tracing::info!("Generating entry worker for '{}'...", function_name);
@@ -119,10 +128,7 @@ fn generate_reactrouter_artifacts(
     let server_dir = output_dir.join("server");
     let client_dir = source_dir.join(&config.assets_dir);
 
-    let server_entry = config
-        .server_entry
-        .as_deref()
-        .unwrap_or("server/index.js");
+    let server_entry = config.server_entry.as_deref().unwrap_or("server/index.js");
     if !server_dir.join(server_entry).exists() {
         return Err(FugueError::BuildError(format!(
             "{}/{} not found",
@@ -159,7 +165,6 @@ fn generate_vite_artifacts(
 ) -> Result<PathBuf> {
     let config = ProjectConfig::load(source_dir, "vite")?;
     let output_dir = source_dir.join(&config.build_output_dir);
-    let worker_dir = output_dir.join("vite_app");
     let client_dir = source_dir.join(&config.assets_dir);
 
     let server_entry = config
@@ -173,6 +178,12 @@ fn generate_vite_artifacts(
         )));
     }
 
+    let worker_subdir = Path::new(server_entry)
+        .parent()
+        .and_then(|p| p.to_str())
+        .unwrap_or("vite_app");
+    let worker_dir = output_dir.join(worker_subdir);
+
     let workerd_func_dir = workerd_dir.join(function_name);
     std::fs::create_dir_all(&workerd_func_dir)?;
 
@@ -180,7 +191,10 @@ fn generate_vite_artifacts(
     let assets_count = embed_static_assets(&client_dir, &workerd_func_dir)?;
     tracing::info!("Embedded {} static assets", assets_count);
 
-    tracing::info!("Bundling Vite worker with esbuild for '{}'...", function_name);
+    tracing::info!(
+        "Bundling Vite worker with esbuild for '{}'...",
+        function_name
+    );
     bundle_vite_worker_with_esbuild(&worker_dir, &workerd_func_dir)?;
 
     tracing::info!("Generating entry worker for '{}'...", function_name);
@@ -223,7 +237,10 @@ fn bundle_vite_worker_with_esbuild(worker_dir: &Path, workerd_func_dir: &Path) -
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(FugueError::BuildError(format!("esbuild failed: {}", stderr)));
+        return Err(FugueError::BuildError(format!(
+            "esbuild failed: {}",
+            stderr
+        )));
     }
 
     tracing::info!("Bundle written to {:?}", bundle_out);
@@ -340,7 +357,13 @@ export default assets;
 
     let mut entries = Vec::new();
     let mut count = 0usize;
-    walk_and_embed(public_dir, public_dir, &mime_types, &mut entries, &mut count)?;
+    walk_and_embed(
+        public_dir,
+        public_dir,
+        &mime_types,
+        &mut entries,
+        &mut count,
+    )?;
 
     let entries_str = entries.join(",\n");
     let code = format!(
@@ -434,7 +457,10 @@ fn bundle_server_with_esbuild(server_dir: &Path, workerd_func_dir: &Path) -> Res
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(FugueError::BuildError(format!("esbuild failed: {}", stderr)));
+        return Err(FugueError::BuildError(format!(
+            "esbuild failed: {}",
+            stderr
+        )));
     }
 
     tracing::info!("Bundle written to {:?}", bundle_out);

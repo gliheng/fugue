@@ -86,7 +86,9 @@ export default function DeploymentDetail() {
       ? "React Router"
       : app.framework === "nuxtjs"
         ? "Nuxt.js"
-        : "Worker";
+        : app.framework === "vite"
+          ? "Vite"
+          : "Worker";
 
   return (
     <div className="p-8 max-w-6xl mx-auto">

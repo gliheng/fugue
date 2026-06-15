@@ -13,7 +13,8 @@ export function meta({}: Route.MetaArgs) {
 const FRAMEWORK_TEMPLATES = [
   { id: "react-router", name: "React Router", icon: "lucide:route", desc: "React Router v7 with SSR" },
   { id: "nuxtjs", name: "Nuxt.js", icon: "lucide:hexagon", desc: "Full-stack Nuxt.js with SSR" },
-  { id: "vite", name: "Vite", icon: "lucide:zap", desc: "Vite SPA with Worker API routes" },
+  { id: "vite-react", name: "Vite React", icon: "lucide:zap", desc: "Vite SPA with React and Worker API routes" },
+  { id: "vite-vue", name: "Vite Vue", icon: "lucide:triangle", desc: "Vite SPA with Vue and Worker API routes" },
   { id: "worker", name: "Worker", icon: "lucide:file-code", desc: "Simple Cloudflare Worker" },
 ];
 
@@ -21,6 +22,8 @@ const FRAMEWORK_ICONS: Record<string, string> = {
   "react-router": "lucide:route",
   nuxtjs: "lucide:hexagon",
   vite: "lucide:zap",
+  "vite-react": "lucide:zap",
+  "vite-vue": "lucide:triangle",
   worker: "lucide:file-code",
 };
 

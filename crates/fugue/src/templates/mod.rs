@@ -115,7 +115,7 @@ pub fn get_template_files(framework: &str) -> Result<Vec<(String, Vec<u8>)>, Str
             let dir = templates.join("react-router-simple");
             if !dir.is_dir() {
                 return Err(
-                    "React Router template not found at examples/react-router-simple/".to_string()
+                    "React Router template not found at examples/react-router-simple/".to_string(),
                 );
             }
             let mut files = Vec::new();
@@ -123,14 +123,24 @@ pub fn get_template_files(framework: &str) -> Result<Vec<(String, Vec<u8>)>, Str
                 .map_err(|e| format!("Failed to read react-router template: {}", e))?;
             Ok(files)
         }
-        "vite" => {
+        "vite-react" | "vite" => {
             let dir = templates.join("vite-react");
             if !dir.is_dir() {
-                return Err("Vite template not found at examples/vite-react/".to_string());
+                return Err("Vite React template not found at examples/vite-react/".to_string());
             }
             let mut files = Vec::new();
             walk_template_dir(&dir, &dir, &mut files)
-                .map_err(|e| format!("Failed to read vite template: {}", e))?;
+                .map_err(|e| format!("Failed to read vite-react template: {}", e))?;
+            Ok(files)
+        }
+        "vite-vue" => {
+            let dir = templates.join("vite-vue");
+            if !dir.is_dir() {
+                return Err("Vite Vue template not found at examples/vite-vue/".to_string());
+            }
+            let mut files = Vec::new();
+            walk_template_dir(&dir, &dir, &mut files)
+                .map_err(|e| format!("Failed to read vite-vue template: {}", e))?;
             Ok(files)
         }
         _ => Err(format!("Unknown framework: {}", framework)),
