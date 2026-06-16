@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link } from "react-router";
 import { Button, Card, Input, Modal, Spinner, ToggleButton, ToggleButtonGroup } from "@heroui/react";
 import { Icon } from "@iconify/react";
@@ -8,6 +8,8 @@ import { api } from "../lib/api";
 import { FileTree } from "../components/file-tree";
 import type { Route } from "./+types/workspace_.$id";
 
+const MonacoEditor = lazy(() => import("@monaco-editor/react"));
+
 const FRAMEWORK_TEMPLATES = [
   { id: "react-router", name: "React Router", icon: "lucide:route", desc: "React Router v7 with SSR" },
   { id: "nuxtjs", name: "Nuxt.js", icon: "lucide:hexagon", desc: "Full-stack Nuxt.js with SSR" },
@@ -15,6 +17,18 @@ const FRAMEWORK_TEMPLATES = [
   { id: "worker", name: "Worker", icon: "lucide:file-code", desc: "Simple Cloudflare Worker" },
   { id: "hono", name: "Hono", icon: "lucide:flame", desc: "Hono app on Cloudflare Workers" },
 ];
+
+function normalizePath(path: string): string {
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+function normalizeFiles(files: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [path, content] of Object.entries(files)) {
+    out[normalizePath(path)] = content;
+  }
+  return out;
+}
 
 export function meta({ params }: Route.MetaArgs) {
   return [{ title: `Workspace ${params.id} - Fugue Dashboard` }];
@@ -25,7 +39,8 @@ export default function WorkspaceEditor() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [activeFile, setActiveFile] = useState<string | null>(null);
+  const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [localEdits, setLocalEdits] = useState<Record<string, string>>({});
   const [deployOpen, setDeployOpen] = useState(false);
   const [deploying, setDeploying] = useState(false);
@@ -53,26 +68,45 @@ export default function WorkspaceEditor() {
       api.updateWorkspace(id!, { files }),
   });
 
+  const serverFiles = useMemo(() => normalizeFiles(workspace?.files ?? {}), [workspace?.files]);
+  const files = useMemo(() => ({ ...serverFiles, ...localEdits }), [serverFiles, localEdits]);
+  const fileList = useMemo(() => Object.keys(serverFiles).sort(), [serverFiles]);
+
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleEdit = useCallback((filePath: string, content: string) => {
-    setLocalEdits((prev) => ({ ...prev, [filePath]: content }));
+  const openFile = useCallback((path: string) => {
+    const normalized = normalizePath(path);
+    setActiveFile(normalized);
+    setOpenFiles((prev) => (prev.includes(normalized) ? prev : [...prev, normalized]));
+  }, []);
 
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(() => {
-      const merged = { ...(workspace?.files ?? {}), ...localEdits, [filePath]: content };
-      updateMutation.mutate(merged);
-    }, 1000);
-  }, [id, workspace, localEdits, updateMutation]);
+  const closeFile = useCallback((path: string) => {
+    setOpenFiles((prev) => {
+      const next = prev.filter((p) => p !== path);
+      if (activeFile === path) {
+        setActiveFile(next[next.length - 1] ?? null);
+      }
+      return next;
+    });
+  }, [activeFile]);
+
+  const handleEdit = useCallback((filePath: string, content: string) => {
+    setLocalEdits((prev) => {
+      const next = { ...prev, [filePath]: content };
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        const merged = { ...serverFiles, ...next };
+        updateMutation.mutate(merged);
+      }, 1000);
+      return next;
+    });
+  }, [serverFiles, updateMutation]);
 
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
   }, []);
-
-  const files = { ...(workspace?.files ?? {}), ...localEdits };
-  const fileList = Object.keys(workspace?.files ?? {}).sort();
 
   const handleDeploy = async () => {
     if (!workspace) return;
@@ -128,7 +162,7 @@ export default function WorkspaceEditor() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex items-center justify-center h-screen">
         <Spinner size="lg" />
       </div>
     );
@@ -146,14 +180,14 @@ export default function WorkspaceEditor() {
   const frameworkLabel = FRAMEWORK_TEMPLATES.find((t) => t.id === workspace.framework)?.name ?? workspace.framework;
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <div className="flex items-center gap-2 text-sm text-muted mb-4">
+    <div className="flex flex-col h-screen">
+      <div className="flex items-center gap-2 text-sm text-muted px-6 pt-4 pb-2 shrink-0">
         <Link to="/workspace" className="text-accent hover:underline">Workspace</Link>
         <Icon icon="lucide:chevron-right" className="w-3 h-3" />
         <span>{workspace.name}</span>
       </div>
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between px-6 pb-3 shrink-0">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">{workspace.name}</h1>
           <button
@@ -165,6 +199,12 @@ export default function WorkspaceEditor() {
           <span className="text-xs text-muted px-2 py-0.5 rounded bg-surface-tertiary">{frameworkLabel}</span>
         </div>
         <div className="flex items-center gap-2">
+          {Object.keys(localEdits).length > 0 && (
+            <span className="text-xs text-warning flex items-center gap-1">
+              <Icon icon="lucide:clock" className="w-3 h-3" />
+              Auto-saving changes...
+            </span>
+          )}
           <Button size="sm" onPress={() => setDeployOpen(true)}>
             <Icon icon="lucide:rocket" className="w-3 h-3" />
             Deploy
@@ -172,31 +212,30 @@ export default function WorkspaceEditor() {
         </div>
       </div>
 
-      {Object.keys(localEdits).length > 0 && (
-        <p className="text-xs text-warning mb-2">
-          <Icon icon="lucide:clock" className="w-3 h-3 inline mr-1" />
-          Auto-saving changes...
-        </p>
-      )}
-
-      <div className="flex gap-4 h-[600px]">
-        <div className="w-64 shrink-0 bg-surface-secondary rounded-lg p-3 overflow-auto">
+      <div className="flex gap-4 flex-1 min-h-0 px-6 pb-4">
+        <div className="w-64 shrink-0 bg-surface-secondary rounded-lg p-3 overflow-auto border border-border">
+          <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 px-2">Files</h2>
           <FileTree
             files={files}
-            selectedPath={selectedFile ? `/${selectedFile}` : undefined}
-            onSelect={(path) => setSelectedFile(path.startsWith("/") ? path.slice(1) : path)}
+            selectedPath={activeFile ?? undefined}
+            onSelect={openFile}
           />
         </div>
-        <div className="flex-1 min-w-0">
-          {selectedFile && files[selectedFile] !== undefined ? (
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+          {activeFile && files[activeFile] !== undefined ? (
             <EditorPanel
-              filePath={selectedFile}
-              content={files[selectedFile]}
-              onChange={(content) => handleEdit(selectedFile, content)}
+              filePath={activeFile}
+              content={files[activeFile]}
+              openFiles={openFiles}
+              dirtyFiles={new Set(Object.keys(localEdits))}
+              onChange={(content) => handleEdit(activeFile, content)}
+              onSelect={openFile}
+              onClose={closeFile}
             />
           ) : (
-            <div className="flex items-center justify-center h-full text-muted">
-              Select a file to edit
+            <div className="flex flex-col items-center justify-center flex-1 text-muted border border-dashed border-border rounded-lg bg-surface-secondary/50">
+              <Icon icon="lucide:file-code" className="w-12 h-12 mb-3 opacity-50" />
+              <p className="text-sm">Select a file from the sidebar to edit</p>
             </div>
           )}
         </div>
@@ -334,32 +373,71 @@ export default function WorkspaceEditor() {
 function EditorPanel({
   filePath,
   content,
+  openFiles,
+  dirtyFiles,
   onChange,
+  onSelect,
+  onClose,
 }: {
   filePath: string;
   content: string;
+  openFiles: string[];
+  dirtyFiles: Set<string>;
   onChange: (content: string) => void;
+  onSelect: (path: string) => void;
+  onClose: (path: string) => void;
 }) {
   const language = getLanguage(filePath);
 
   return (
-    <Card className="w-full h-full">
-      <Card.Header className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon icon="lucide:file-code" className="w-4 h-4 text-accent" />
-          <span className="text-sm font-mono text-muted">{filePath}</span>
+    <Card className="w-full flex-1 flex flex-col overflow-hidden">
+      {openFiles.length > 0 && (
+        <div className="flex items-center gap-1 px-2 pt-2 pb-1 border-b border-border bg-surface-secondary/50 overflow-x-auto">
+          {openFiles.map((path) => {
+            const isActive = path === filePath;
+            const fileName = path.split("/").pop() ?? path;
+            return (
+              <button
+                key={path}
+                onClick={() => onSelect(path)}
+                className={`group flex items-center gap-2 px-3 py-1.5 rounded-t-md text-xs border-t border-l border-r transition-colors min-w-0 ${
+                  isActive
+                    ? "bg-surface-primary text-foreground border-border"
+                    : "bg-surface-secondary text-muted border-transparent hover:text-foreground"
+                }`}
+              >
+                <Icon icon={getFileIcon(fileName)} className="w-3 h-3 shrink-0" />
+                <span className="truncate max-w-[140px]">{fileName}</span>
+                {dirtyFiles.has(path) && <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" />}
+                <span
+                  onClick={(e) => { e.stopPropagation(); onClose(path); }}
+                  className="opacity-0 group-hover:opacity-100 hover:text-danger transition-opacity shrink-0"
+                  aria-label="Close file"
+                >
+                  <Icon icon="lucide:x" className="w-3 h-3" />
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <Card.Header className="flex items-center justify-between shrink-0 border-b border-border">
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon icon="lucide:file-code" className="w-4 h-4 text-accent shrink-0" />
+          <span className="text-sm font-mono text-muted truncate">{filePath}</span>
         </div>
       </Card.Header>
-      <Card.Content className="p-0 overflow-hidden">
+      <Card.Content className="p-0 overflow-hidden flex-1 min-h-0">
         <Suspense
           fallback={
-            <div className="flex items-center justify-center h-96">
+            <div className="flex items-center justify-center h-full">
               <Spinner size="lg" />
             </div>
           }
         >
           <MonacoEditor
-            height="500px"
+            key={filePath}
+            height="100%"
             language={language}
             value={content}
             onChange={(v) => onChange(v ?? "")}
@@ -370,6 +448,8 @@ function EditorPanel({
               lineNumbers: "on",
               wordWrap: "on",
               padding: { top: 8 },
+              automaticLayout: true,
+              scrollBeyondLastLine: false,
             }}
           />
         </Suspense>
@@ -386,4 +466,19 @@ function getLanguage(path: string): string {
     rs: "rust", yml: "yaml", yaml: "yaml",
   };
   return map[ext] ?? "plaintext";
+}
+
+function getFileIcon(name: string): string {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    ts: "lucide:file-type",
+    tsx: "lucide:file-type",
+    js: "lucide:file-code-2",
+    jsx: "lucide:file-code-2",
+    json: "lucide:braces",
+    css: "lucide:paintbrush",
+    html: "lucide:file-code",
+    md: "lucide:file-text",
+  };
+  return map[ext] ?? "lucide:file";
 }

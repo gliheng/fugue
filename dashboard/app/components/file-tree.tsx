@@ -1,4 +1,12 @@
-import { Disclosure, DisclosureGroup } from "@heroui/react";
+import {
+  Disclosure,
+  DisclosureTrigger,
+  DisclosureHeading,
+  DisclosureContent,
+  DisclosureBody,
+  DisclosureIndicator,
+  DisclosureGroup,
+} from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 interface FileNode {
@@ -55,7 +63,7 @@ const fileIcons: Record<string, string> = {
   js: "lucide:file-code-2",
   jsx: "lucide:file-code-2",
   json: "lucide:braces",
-  css: "lucide: Paintbrush",
+  css: "lucide:paintbrush",
   html: "lucide:file-code",
   md: "lucide:file-text",
 };
@@ -100,12 +108,23 @@ function FileTreeNodeList({
     <DisclosureGroup>
       {nodes.map((node) =>
         node.type === "directory" && node.children ? (
-          <Disclosure key={node.path} title={node.name}>
-            <FileTreeNodeList
-              nodes={node.children}
-              selectedPath={selectedPath}
-              onSelect={onSelect}
-            />
+          <Disclosure key={node.path} defaultExpanded>
+            <DisclosureTrigger className="flex items-center gap-2 w-full px-2 py-1 rounded-md text-left text-sm hover:bg-surface-secondary transition-colors">
+              <DisclosureIndicator>
+                <Icon icon="lucide:chevron-right" className="w-3.5 h-3.5 text-muted" />
+              </DisclosureIndicator>
+              <Icon icon="lucide:folder" className="w-3.5 h-3.5 text-muted" />
+              <DisclosureHeading className="text-sm font-normal truncate">{node.name}</DisclosureHeading>
+            </DisclosureTrigger>
+            <DisclosureContent>
+              <DisclosureBody className="pl-4">
+                <FileTreeNodeList
+                  nodes={node.children}
+                  selectedPath={selectedPath}
+                  onSelect={onSelect}
+                />
+              </DisclosureBody>
+            </DisclosureContent>
           </Disclosure>
         ) : (
           <button

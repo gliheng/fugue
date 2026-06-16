@@ -36,7 +36,7 @@ export function DeployButton({
   return (
     <div className="flex items-center gap-3">
       <Button
-        color="accent"
+        className="bg-accent text-white hover:opacity-90"
         onPress={handleDeploy}
         isDisabled={loading}
       >

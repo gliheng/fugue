@@ -66,13 +66,13 @@ export function CodeEditor({
       <Card.Content className="p-0 overflow-hidden">
         <Suspense
           fallback={
-            <div className="flex items-center justify-center h-96">
+            <div className="flex items-center justify-center h-full">
               <Spinner size="lg" />
             </div>
           }
         >
           <MonacoEditor
-            height="500px"
+            height="100%"
             language={language}
             value={content}
             onChange={readOnly ? undefined : handleChange}
@@ -83,6 +83,8 @@ export function CodeEditor({
               lineNumbers: "on",
               wordWrap: "on",
               padding: { top: 8 },
+              automaticLayout: true,
+              scrollBeyondLastLine: false,
               readOnly,
             }}
           />

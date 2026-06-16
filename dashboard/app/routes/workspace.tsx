@@ -148,7 +148,7 @@ export default function WorkspaceList() {
           <p className="text-muted text-sm mb-6 text-center max-w-md">
             Pick a template, customize the code, and deploy it to an app
           </p>
-          <Button color="accent" size="lg" onPress={() => setTemplateOpen(true)}>
+          <Button className="bg-accent text-white hover:opacity-90" size="lg" onPress={() => setTemplateOpen(true)}>
             <Icon icon="lucide:plus" className="w-5 h-5" />
             Create App
           </Button>
@@ -226,8 +226,8 @@ export default function WorkspaceList() {
               <Modal.Heading>Rename workspace</Modal.Heading>
             </Modal.Header>
             <Modal.Body>
+              <label className="block text-sm font-medium mb-1">Name</label>
               <Input
-                label="Name"
                 value={renameName}
                 onChange={(e) => setRenameName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleRename(); }}
