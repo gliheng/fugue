@@ -4,3 +4,5 @@ build/
 .wrangler/
 *.tsbuildinfo
 worker-configuration.d.ts
+
+.yarn/
