@@ -1,0 +1,18 @@
+npm warn Unknown user config "// registry". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown user config "// email". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown user config "// home". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown user config "// proxy". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm warn Unknown user config "// https-proxy". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+> dev
+> react-router dev
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+  ➜  Debug:   http://localhost:5173/__debug
+5:19:16 PM [vite] (client) hmr update /app/routes/workspace_.$id.tsx
+5:19:16 PM [vite] (client) hmr update /app/routes/workspace_.$id.tsx
+5:19:16 PM [vite] (ssr) hmr update /app/app.css, /@id/virtual:cloudflare/worker-entry
+5:19:16 PM [vite] (client) hmr update /app/app.css, /app/routes/workspace_.$id.tsx
+[vite] hot updated: virtual:cloudflare/worker-entry
+  ➜  Tunnel closed

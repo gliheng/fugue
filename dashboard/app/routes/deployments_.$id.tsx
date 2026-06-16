@@ -241,14 +241,14 @@ export default function DeploymentDetail() {
               <div className="flex-1 min-w-0">
                 {selectedFile && fileEntries[selectedFile] !== undefined ? (
                   <CodeEditor
-                    appId={app.id}
                     filePath={selectedFile}
-                    content={fileEntries[selectedFile]}
-                    readOnly
+                    value={fileEntries[selectedFile]}
+                    mode="readonly"
+                    openPaths={[selectedFile]}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-muted">
-                    Select a file to view or edit
+                    Select a file to view
                   </div>
                 )}
               </div>

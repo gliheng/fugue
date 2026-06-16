@@ -1,14 +1,13 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, Link } from "react-router";
-import { Button, Card, Input, Modal, Spinner, ToggleButton, ToggleButtonGroup } from "@heroui/react";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, Link, useNavigate, useBlocker } from "react-router";
+import { Button, Input, Modal, Spinner, ToggleButton, ToggleButtonGroup } from "@heroui/react";
 import { Icon } from "@iconify/react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router";
 import { api } from "../lib/api";
 import { FileTree } from "../components/file-tree";
+import { EditorPanel } from "../components/editor-panel";
+import { useWorkspaceFiles } from "../hooks/use-workspace-files";
 import type { Route } from "./+types/workspace_.$id";
-
-const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
 const FRAMEWORK_TEMPLATES = [
   { id: "react-router", name: "React Router", icon: "lucide:route", desc: "React Router v7 with SSR" },
@@ -17,18 +16,6 @@ const FRAMEWORK_TEMPLATES = [
   { id: "worker", name: "Worker", icon: "lucide:file-code", desc: "Simple Cloudflare Worker" },
   { id: "hono", name: "Hono", icon: "lucide:flame", desc: "Hono app on Cloudflare Workers" },
 ];
-
-function normalizePath(path: string): string {
-  return path.startsWith("/") ? path : `/${path}`;
-}
-
-function normalizeFiles(files: Record<string, string>): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [path, content] of Object.entries(files)) {
-    out[normalizePath(path)] = content;
-  }
-  return out;
-}
 
 export function meta({ params }: Route.MetaArgs) {
   return [{ title: `Workspace ${params.id} - Fugue Dashboard` }];
@@ -39,9 +26,6 @@ export default function WorkspaceEditor() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [activeFile, setActiveFile] = useState<string | null>(null);
-  const [openFiles, setOpenFiles] = useState<string[]>([]);
-  const [localEdits, setLocalEdits] = useState<Record<string, string>>({});
   const [deployOpen, setDeployOpen] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
@@ -63,59 +47,42 @@ export default function WorkspaceEditor() {
     queryFn: () => api.listApps(),
   });
 
-  const updateMutation = useMutation({
-    mutationFn: (files: Record<string, string>) =>
-      api.updateWorkspace(id!, { files }),
+  const editor = useWorkspaceFiles({
+    workspaceId: id!,
+    initialFiles: workspace?.files ?? {},
+    saveStrategy: "auto",
+    autoSaveDelay: 1000,
   });
 
-  const serverFiles = useMemo(() => normalizeFiles(workspace?.files ?? {}), [workspace?.files]);
-  const files = useMemo(() => ({ ...serverFiles, ...localEdits }), [serverFiles, localEdits]);
-  const fileList = useMemo(() => Object.keys(serverFiles).sort(), [serverFiles]);
-
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const openFile = useCallback((path: string) => {
-    const normalized = normalizePath(path);
-    setActiveFile(normalized);
-    setOpenFiles((prev) => (prev.includes(normalized) ? prev : [...prev, normalized]));
-  }, []);
-
-  const closeFile = useCallback((path: string) => {
-    setOpenFiles((prev) => {
-      const next = prev.filter((p) => p !== path);
-      if (activeFile === path) {
-        setActiveFile(next[next.length - 1] ?? null);
-      }
-      return next;
-    });
-  }, [activeFile]);
-
-  const handleEdit = useCallback((filePath: string, content: string) => {
-    setLocalEdits((prev) => {
-      const next = { ...prev, [filePath]: content };
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = setTimeout(() => {
-        const merged = { ...serverFiles, ...next };
-        updateMutation.mutate(merged);
-      }, 1000);
-      return next;
-    });
-  }, [serverFiles, updateMutation]);
+  const blocker = useBlocker(editor.dirtyFiles.length > 0);
 
   useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    if (editor.dirtyFiles.length === 0) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
     };
-  }, []);
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [editor.dirtyFiles]);
+
+  const fileTreeFiles = useMemo(
+    () => Object.fromEntries(Object.values(editor.files).map((f) => [f.path, f.currentContent])),
+    [editor.files],
+  );
 
   const handleDeploy = async () => {
-    if (!workspace) return;
+    if (!workspace || !id) return;
     setDeploying(true);
     setDeployError(null);
     setDeploySuccess(null);
 
     try {
-      const sourceToUpload = files;
+      const filesToUpload: Record<string, string> = {};
+      for (const file of Object.values(editor.files)) {
+        filesToUpload[file.path] = file.currentContent;
+      }
+
       let appId: string;
 
       if (createNew) {
@@ -139,7 +106,7 @@ export default function WorkspaceEditor() {
         appId = selectedAppId;
       }
 
-      await api.deployWorkspace(id!, appId);
+      await api.deployWorkspace(id, appId);
       setDeploySuccess(appId);
       await queryClient.invalidateQueries({ queryKey: ["apps"] });
     } catch (e) {
@@ -199,10 +166,10 @@ export default function WorkspaceEditor() {
           <span className="text-xs text-muted px-2 py-0.5 rounded bg-surface-tertiary">{frameworkLabel}</span>
         </div>
         <div className="flex items-center gap-2">
-          {Object.keys(localEdits).length > 0 && (
+          {editor.dirtyFiles.length > 0 && (
             <span className="text-xs text-warning flex items-center gap-1">
               <Icon icon="lucide:clock" className="w-3 h-3" />
-              Auto-saving changes...
+              {editor.dirtyFiles.some((f) => f.status === "saving") ? "Saving..." : "Unsaved changes"}
             </span>
           )}
           <Button size="sm" onPress={() => setDeployOpen(true)}>
@@ -216,28 +183,24 @@ export default function WorkspaceEditor() {
         <div className="w-64 shrink-0 bg-surface-secondary rounded-lg p-3 overflow-auto border border-border">
           <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 px-2">Files</h2>
           <FileTree
-            files={files}
-            selectedPath={activeFile ?? undefined}
-            onSelect={openFile}
+            files={fileTreeFiles}
+            selectedPath={editor.activePath ?? undefined}
+            onSelect={editor.openFile}
           />
         </div>
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-          {activeFile && files[activeFile] !== undefined ? (
-            <EditorPanel
-              filePath={activeFile}
-              content={files[activeFile]}
-              openFiles={openFiles}
-              dirtyFiles={new Set(Object.keys(localEdits))}
-              onChange={(content) => handleEdit(activeFile, content)}
-              onSelect={openFile}
-              onClose={closeFile}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center flex-1 text-muted border border-dashed border-border rounded-lg bg-surface-secondary/50">
-              <Icon icon="lucide:file-code" className="w-12 h-12 mb-3 opacity-50" />
-              <p className="text-sm">Select a file from the sidebar to edit</p>
-            </div>
-          )}
+          <EditorPanel
+            files={editor.files}
+            activePath={editor.activePath}
+            openPaths={editor.openPaths}
+            onOpen={editor.openFile}
+            onClose={editor.closeFile}
+            onChange={editor.updateContent}
+            onSave={editor.saveFile}
+            onSaveAll={editor.saveAll}
+            mode="edit"
+            saveStrategy="auto"
+          />
         </div>
       </div>
 
@@ -249,6 +212,7 @@ export default function WorkspaceEditor() {
               <Modal.Heading>Rename Workspace</Modal.Heading>
             </Modal.Header>
             <Modal.Body>
+              <label className="block text-sm font-medium mb-1">Name</label>
               <Input
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
@@ -366,119 +330,31 @@ export default function WorkspaceEditor() {
           </Modal.Dialog>
         </Modal.Container>
       </Modal.Backdrop>
+
+      {blocker.state === "blocked" && (
+        <Modal.Backdrop isOpen onOpenChange={() => blocker.reset?.()}>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-sm">
+              <Modal.Header>
+                <Modal.Heading>Unsaved changes</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <p className="text-sm text-muted">
+                  You have {editor.dirtyFiles.length} unsaved file{editor.dirtyFiles.length === 1 ? "" : "s"}. Leaving now will discard your changes.
+                </p>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="secondary" onPress={() => blocker.reset?.()}>
+                  Stay
+                </Button>
+                <Button onPress={() => blocker.proceed?.()}>
+                  Leave without saving
+                </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      )}
     </div>
   );
-}
-
-function EditorPanel({
-  filePath,
-  content,
-  openFiles,
-  dirtyFiles,
-  onChange,
-  onSelect,
-  onClose,
-}: {
-  filePath: string;
-  content: string;
-  openFiles: string[];
-  dirtyFiles: Set<string>;
-  onChange: (content: string) => void;
-  onSelect: (path: string) => void;
-  onClose: (path: string) => void;
-}) {
-  const language = getLanguage(filePath);
-
-  return (
-    <Card className="w-full flex-1 flex flex-col overflow-hidden">
-      {openFiles.length > 0 && (
-        <div className="flex items-center gap-1 px-2 pt-2 pb-1 border-b border-border bg-surface-secondary/50 overflow-x-auto">
-          {openFiles.map((path) => {
-            const isActive = path === filePath;
-            const fileName = path.split("/").pop() ?? path;
-            return (
-              <button
-                key={path}
-                onClick={() => onSelect(path)}
-                className={`group flex items-center gap-2 px-3 py-1.5 rounded-t-md text-xs border-t border-l border-r transition-colors min-w-0 ${
-                  isActive
-                    ? "bg-surface-primary text-foreground border-border"
-                    : "bg-surface-secondary text-muted border-transparent hover:text-foreground"
-                }`}
-              >
-                <Icon icon={getFileIcon(fileName)} className="w-3 h-3 shrink-0" />
-                <span className="truncate max-w-[140px]">{fileName}</span>
-                {dirtyFiles.has(path) && <span className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" />}
-                <span
-                  onClick={(e) => { e.stopPropagation(); onClose(path); }}
-                  className="opacity-0 group-hover:opacity-100 hover:text-danger transition-opacity shrink-0"
-                  aria-label="Close file"
-                >
-                  <Icon icon="lucide:x" className="w-3 h-3" />
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-      <Card.Header className="flex items-center justify-between shrink-0 border-b border-border">
-        <div className="flex items-center gap-2 min-w-0">
-          <Icon icon="lucide:file-code" className="w-4 h-4 text-accent shrink-0" />
-          <span className="text-sm font-mono text-muted truncate">{filePath}</span>
-        </div>
-      </Card.Header>
-      <Card.Content className="p-0 overflow-hidden flex-1 min-h-0">
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center h-full">
-              <Spinner size="lg" />
-            </div>
-          }
-        >
-          <MonacoEditor
-            key={filePath}
-            height="100%"
-            language={language}
-            value={content}
-            onChange={(v) => onChange(v ?? "")}
-            theme="vs-dark"
-            options={{
-              minimap: { enabled: false },
-              fontSize: 13,
-              lineNumbers: "on",
-              wordWrap: "on",
-              padding: { top: 8 },
-              automaticLayout: true,
-              scrollBeyondLastLine: false,
-            }}
-          />
-        </Suspense>
-      </Card.Content>
-    </Card>
-  );
-}
-
-function getLanguage(path: string): string {
-  const ext = path.split(".").pop()?.toLowerCase() ?? "";
-  const map: Record<string, string> = {
-    ts: "typescript", tsx: "typescriptreact", js: "javascript", jsx: "javascript",
-    json: "json", css: "css", html: "html", md: "markdown", toml: "toml",
-    rs: "rust", yml: "yaml", yaml: "yaml",
-  };
-  return map[ext] ?? "plaintext";
-}
-
-function getFileIcon(name: string): string {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  const map: Record<string, string> = {
-    ts: "lucide:file-type",
-    tsx: "lucide:file-type",
-    js: "lucide:file-code-2",
-    jsx: "lucide:file-code-2",
-    json: "lucide:braces",
-    css: "lucide:paintbrush",
-    html: "lucide:file-code",
-    md: "lucide:file-text",
-  };
-  return map[ext] ?? "lucide:file";
 }

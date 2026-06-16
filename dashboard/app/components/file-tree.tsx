@@ -8,6 +8,7 @@ import {
   DisclosureGroup,
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
+import { getFileIcon } from "../lib/icons";
 
 interface FileNode {
   name: string;
@@ -55,22 +56,6 @@ function sortTree(nodes: FileNode[]): FileNode[] {
     ...node,
     children: node.children ? sortTree(node.children) : undefined,
   }));
-}
-
-const fileIcons: Record<string, string> = {
-  ts: "lucide:file-type",
-  tsx: "lucide:file-type",
-  js: "lucide:file-code-2",
-  jsx: "lucide:file-code-2",
-  json: "lucide:braces",
-  css: "lucide:paintbrush",
-  html: "lucide:file-code",
-  md: "lucide:file-text",
-};
-
-function getFileIcon(name: string): string {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  return fileIcons[ext] ?? "lucide:file";
 }
 
 export function FileTree({

@@ -1,97 +1,18 @@
 "use client";
 
-import { Suspense, lazy, useState } from "react";
-import { Button, Card, Spinner } from "@heroui/react";
-import { Icon } from "@iconify/react";
-import { api } from "../lib/api";
+import { useEffect, useRef } from "react";
+import { Editor, type Monaco, type OnMount } from "@monaco-editor/react";
+import { useDashboardTheme, toMonacoTheme } from "../lib/theme";
 
-const MonacoEditor = lazy(() => import("@monaco-editor/react"));
+export type EditorMode = "edit" | "readonly";
 
-export function CodeEditor({
-  appId,
-  filePath,
-  content: initialContent,
-  onSave,
-  readOnly = false,
-}: {
-  appId: string;
+export interface CodeEditorProps {
   filePath: string;
-  content: string;
-  onSave?: () => void;
-  readOnly?: boolean;
-}) {
-  const [content, setContent] = useState(initialContent);
-  const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState(false);
-
-  const handleChange = (value: string | undefined) => {
-    if (value !== undefined && value !== content) {
-      setContent(value);
-      setDirty(true);
-    }
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await api.updateSource(appId, filePath, content);
-      setDirty(false);
-      onSave?.();
-    } catch (e) {
-      console.error("Failed to save:", e);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const language = getLanguage(filePath);
-
-  return (
-    <Card className="w-full h-full">
-      <Card.Header className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Icon icon="lucide:file-code" className="w-4 h-4 text-accent" />
-          <span className="text-sm font-mono text-muted">{filePath}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {dirty && !readOnly && <span className="text-xs text-warning">Unsaved changes</span>}
-          {!readOnly && (
-            <Button size="sm" variant="secondary" onPress={handleSave} isDisabled={!dirty || saving}>
-              {saving ? <Spinner color="current" size="sm" /> : <Icon icon="lucide:save" className="w-3 h-3" />}
-              Save
-            </Button>
-          )}
-        </div>
-      </Card.Header>
-      <Card.Content className="p-0 overflow-hidden">
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center h-full">
-              <Spinner size="lg" />
-            </div>
-          }
-        >
-          <MonacoEditor
-            height="100%"
-            language={language}
-            value={content}
-            onChange={readOnly ? undefined : handleChange}
-            theme="vs-dark"
-            options={{
-              minimap: { enabled: false },
-              fontSize: 13,
-              lineNumbers: "on",
-              wordWrap: "on",
-              padding: { top: 8 },
-              automaticLayout: true,
-              scrollBeyondLastLine: false,
-              readOnly,
-            }}
-          />
-        </Suspense>
-      </Card.Content>
-    </Card>
-  );
+  value: string;
+  mode?: EditorMode;
+  openPaths?: string[];
+  onChange?: (value: string) => void;
+  onMount?: (editor: Parameters<OnMount>[0], monaco: Monaco) => void;
 }
 
 function getLanguage(path: string): string {
@@ -100,7 +21,7 @@ function getLanguage(path: string): string {
     ts: "typescript",
     tsx: "typescriptreact",
     js: "javascript",
-    jsx: "javascript",
+    jsx: "javascriptreact",
     json: "json",
     css: "css",
     html: "html",
@@ -111,4 +32,141 @@ function getLanguage(path: string): string {
     yaml: "yaml",
   };
   return map[ext] ?? "plaintext";
+}
+
+export function CodeEditor({
+  filePath,
+  value,
+  mode = "edit",
+  openPaths,
+  onChange,
+  onMount,
+}: CodeEditorProps) {
+  const theme = useDashboardTheme();
+  const monacoRef = useRef<Monaco | null>(null);
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const activeModelsRef = useRef<Map<string, ReturnType<Monaco["editor"]["createModel"]>>>(new Map());
+  const cachedModelsRef = useRef<Map<string, ReturnType<Monaco["editor"]["createModel"]>>>(new Map());
+  const pendingValueRef = useRef<string | null>(null);
+  const filePathRef = useRef(filePath);
+  const onChangeRef = useRef(onChange);
+
+  filePathRef.current = filePath;
+  onChangeRef.current = onChange;
+
+  const MAX_CACHED_MODELS = 10;
+
+  const getOrCreateModel = (monaco: Monaco, path: string, content: string) => {
+    const uri = monaco.Uri.file(path);
+    let model = monaco.editor.getModel(uri);
+    if (!model) {
+      const cached = cachedModelsRef.current.get(path);
+      if (cached) {
+        model = cached;
+        cachedModelsRef.current.delete(path);
+      } else {
+        model = monaco.editor.createModel(content, getLanguage(path), uri);
+      }
+    }
+    activeModelsRef.current.set(path, model);
+    return model;
+  };
+
+  const handleMount: OnMount = (editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+
+    // @monaco-editor/react may have created a default model from defaultValue.
+    // We manage our own models per filePath, so switch to ours and dispose the default.
+    const defaultModel = editor.getModel();
+    const model = getOrCreateModel(monaco, filePathRef.current, value);
+    editor.setModel(model);
+    if (defaultModel && defaultModel !== model) {
+      defaultModel.dispose();
+    }
+
+    const disposable = editor.onDidChangeModelContent(() => {
+      const value = editor.getValue();
+      if (value === pendingValueRef.current) {
+        pendingValueRef.current = null;
+        return;
+      }
+      onChangeRef.current?.(value);
+    });
+
+    onMount?.(editor, monaco);
+
+    return () => {
+      disposable.dispose();
+    };
+  };
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco) return;
+
+    const model = getOrCreateModel(monaco, filePath, value);
+    const currentModel = editor.getModel();
+    if (currentModel !== model) {
+      editor.setModel(model);
+    }
+
+    if (model.getValue() !== value) {
+      pendingValueRef.current = value;
+      model.setValue(value);
+    }
+  }, [filePath, value]);
+
+  useEffect(() => {
+    if (!openPaths) return;
+    const openSet = new Set(openPaths);
+
+    // Move closed-tab models to an LRU cache so undo history survives reopening.
+    for (const [path, model] of Array.from(activeModelsRef.current.entries())) {
+      if (!openSet.has(path)) {
+        activeModelsRef.current.delete(path);
+        cachedModelsRef.current.set(path, model);
+      }
+    }
+
+    while (cachedModelsRef.current.size > MAX_CACHED_MODELS) {
+      const firstKey = cachedModelsRef.current.keys().next().value as string;
+      cachedModelsRef.current.get(firstKey)?.dispose();
+      cachedModelsRef.current.delete(firstKey);
+    }
+  }, [openPaths]);
+
+  useEffect(() => {
+    return () => {
+      for (const model of Array.from(activeModelsRef.current.values())) {
+        model.dispose();
+      }
+      activeModelsRef.current.clear();
+      for (const model of Array.from(cachedModelsRef.current.values())) {
+        model.dispose();
+      }
+      cachedModelsRef.current.clear();
+    };
+  }, []);
+
+  return (
+    <Editor
+      height="100%"
+      language={getLanguage(filePath)}
+      defaultValue={value}
+      theme={toMonacoTheme(theme)}
+      options={{
+        readOnly: mode === "readonly",
+        minimap: { enabled: false },
+        fontSize: 13,
+        lineNumbers: "on",
+        wordWrap: "on",
+        padding: { top: 8 },
+        automaticLayout: true,
+        scrollBeyondLastLine: false,
+      }}
+      onMount={handleMount}
+    />
+  );
 }
