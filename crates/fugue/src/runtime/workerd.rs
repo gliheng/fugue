@@ -661,8 +661,15 @@ mod tests {
             .canonicalize()
             .expect("examples/vite-react not found");
         let config = ProjectConfig::load(&source_dir).unwrap();
-        let server_entry = config.server_entry.as_deref().unwrap_or("vite_app/index.js");
-        if !source_dir.join(&config.build_output_dir).join(server_entry).exists() {
+        let server_entry = config
+            .server_entry
+            .as_deref()
+            .unwrap_or("vite_app/index.js");
+        if !source_dir
+            .join(&config.build_output_dir)
+            .join(server_entry)
+            .exists()
+        {
             panic!("Run 'npm run build' in examples/vite-react first");
         }
 
@@ -696,8 +703,15 @@ mod tests {
             .canonicalize()
             .expect("examples/vite-vue not found");
         let config = ProjectConfig::load(&source_dir).unwrap();
-        let server_entry = config.server_entry.as_deref().unwrap_or("vite_app/index.js");
-        if !source_dir.join(&config.build_output_dir).join(server_entry).exists() {
+        let server_entry = config
+            .server_entry
+            .as_deref()
+            .unwrap_or("vite_app/index.js");
+        if !source_dir
+            .join(&config.build_output_dir)
+            .join(server_entry)
+            .exists()
+        {
             panic!("Run 'npm run build' in examples/vite-vue first");
         }
 
@@ -732,7 +746,11 @@ mod tests {
             .expect("examples/react-router-simple not found");
         let config = ProjectConfig::load(&source_dir).unwrap();
         let server_entry = config.server_entry.as_deref().unwrap_or("server/index.js");
-        if !source_dir.join(&config.build_output_dir).join(server_entry).exists() {
+        if !source_dir
+            .join(&config.build_output_dir)
+            .join(server_entry)
+            .exists()
+        {
             panic!("Run 'npm run build' in examples/react-router-simple first");
         }
 

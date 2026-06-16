@@ -98,7 +98,10 @@ pub async fn upload_source(
 
             for i in 0..archive.len() {
                 let mut file = archive.by_index(i).map_err(|e| {
-                    fugue_common::error::FugueError::Other(format!("Failed to read zip entry: {}", e))
+                    fugue_common::error::FugueError::Other(format!(
+                        "Failed to read zip entry: {}",
+                        e
+                    ))
                 })?;
 
                 let outpath = match file.enclosed_name() {
@@ -159,13 +162,11 @@ pub async fn get_source(
 ) -> Result<impl IntoResponse, ApiError> {
     let app = crud::get_app(&state.db, id).await?;
 
-    let source_path = app
-        .source_path
-        .ok_or_else(|| {
-            ApiError(fugue_common::error::FugueError::ValidationError(
-                "No source code uploaded for this app".to_string(),
-            ))
-        })?;
+    let source_path = app.source_path.ok_or_else(|| {
+        ApiError(fugue_common::error::FugueError::ValidationError(
+            "No source code uploaded for this app".to_string(),
+        ))
+    })?;
 
     let source_dir = std::path::Path::new(&source_path);
     if !source_dir.exists() {

@@ -37,13 +37,19 @@ pub fn api_router(state: AppState) -> Router {
         // Source code
         .route("/api/v1/apps/:id/source", post(source::upload_source))
         .route("/api/v1/apps/:id/source", get(source::get_source))
-        .route("/api/v1/apps/:id/source/files", post(source::upload_source_files))
+        .route(
+            "/api/v1/apps/:id/source/files",
+            post(source::upload_source_files),
+        )
         // Build & deploy
         .route("/api/v1/apps/:id/deploy", post(deploy::deploy_app))
         .route("/api/v1/apps/:id/redeploy", post(deploy::redeploy_app))
         .route("/api/v1/apps/:id/builds", get(deploy::list_builds))
         .route("/api/v1/apps/:id/builds/:build_id", get(deploy::get_build))
-        .route("/api/v1/apps/:id/builds/:build_id/logs", get(deploy::build_logs_ws))
+        .route(
+            "/api/v1/apps/:id/builds/:build_id/logs",
+            get(deploy::build_logs_ws),
+        )
         // Runtime
         .route("/api/v1/apps/:id/start", post(runtime::start_app))
         .route("/api/v1/apps/:id/stop", post(runtime::stop_app))
@@ -57,9 +63,18 @@ pub fn api_router(state: AppState) -> Router {
         .route("/api/v1/workspaces", post(workspaces::create_workspace))
         .route("/api/v1/workspaces", get(workspaces::list_workspaces))
         .route("/api/v1/workspaces/:id", get(workspaces::get_workspace))
-        .route("/api/v1/workspaces/:id", patch(workspaces::update_workspace))
-        .route("/api/v1/workspaces/:id/deploy", post(workspaces::deploy_workspace))
-        .route("/api/v1/workspaces/:id", delete(workspaces::delete_workspace))
+        .route(
+            "/api/v1/workspaces/:id",
+            patch(workspaces::update_workspace),
+        )
+        .route(
+            "/api/v1/workspaces/:id/deploy",
+            post(workspaces::deploy_workspace),
+        )
+        .route(
+            "/api/v1/workspaces/:id",
+            delete(workspaces::delete_workspace),
+        )
         .with_state(state)
 }
 

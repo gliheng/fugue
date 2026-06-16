@@ -143,6 +143,16 @@ pub fn get_template_files(framework: &str) -> Result<Vec<(String, Vec<u8>)>, Str
                 .map_err(|e| format!("Failed to read vite-vue template: {}", e))?;
             Ok(files)
         }
+        "hono" => {
+            let dir = templates.join("hono-app");
+            if !dir.is_dir() {
+                return Err("Hono template not found at examples/hono-app/".to_string());
+            }
+            let mut files = Vec::new();
+            walk_template_dir(&dir, &dir, &mut files)
+                .map_err(|e| format!("Failed to read hono template: {}", e))?;
+            Ok(files)
+        }
         _ => Err(format!("Unknown framework: {}", framework)),
     }
 }

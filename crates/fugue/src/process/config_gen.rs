@@ -9,7 +9,7 @@ fn has_required_artifacts(app: &App, workerd_dir: &Path) -> bool {
     }
 
     let required_files: &[&str] = match app.framework.as_str() {
-        "worker" => &["entry.mjs", "worker.js"],
+        "worker" | "hono" => &["entry.mjs", "worker.js"],
         "nuxtjs" | "react-router" | "vite" => &["entry.mjs", "bundle.mjs", "static-assets.mjs"],
         _ => &[],
     };
@@ -17,11 +17,7 @@ fn has_required_artifacts(app: &App, workerd_dir: &Path) -> bool {
     required_files.iter().all(|f| slug_dir.join(f).is_file())
 }
 
-pub fn generate_dispatch_config(
-    apps: &[App],
-    workerd_dir: &Path,
-    port: u16,
-) -> Result<()> {
+pub fn generate_dispatch_config(apps: &[App], workerd_dir: &Path, port: u16) -> Result<()> {
     let eligible_apps: Vec<&App> = apps
         .iter()
         .filter(|app| {
@@ -55,10 +51,7 @@ fn generate_dispatch_mjs(apps: &[&App]) -> String {
     let mut routes = String::new();
     for app in apps {
         let binding_name = format!("APP_{}", app.slug.to_uppercase().replace('-', "_"));
-        routes.push_str(&format!(
-            "  \"{}\": \"{}\",\n",
-            app.subdomain, binding_name
-        ));
+        routes.push_str(&format!("  \"{}\": \"{}\",\n", app.subdomain, binding_name));
     }
 
     format!(
@@ -90,9 +83,7 @@ export default {{
 }
 
 fn generate_config_capnp(apps: &[&App], port: u16) -> String {
-    let mut services = vec![
-        "    (name = \"main\", worker = .dispatchWorker),".to_string(),
-    ];
+    let mut services = vec!["    (name = \"main\", worker = .dispatchWorker),".to_string()];
     let mut workers = vec![generate_dispatch_worker_def(apps)];
     let mut socket_bindings = String::new();
 
@@ -100,7 +91,7 @@ fn generate_config_capnp(apps: &[&App], port: u16) -> String {
         let slug = &app.slug;
 
         match app.framework.as_str() {
-            "worker" => {
+            "worker" | "hono" => {
                 let service_name = format!("app-{}", slug);
                 let assets_service = format!("assets-{}", slug);
                 services.push(format!(
@@ -136,7 +127,11 @@ fn generate_config_capnp(apps: &[&App], port: u16) -> String {
                 ));
 
                 workers.push(generate_framework_entry_worker_def(slug, &app.status));
-                workers.push(generate_framework_ssr_worker_def(slug, &app.status, &app.env_vars));
+                workers.push(generate_framework_ssr_worker_def(
+                    slug,
+                    &app.status,
+                    &app.env_vars,
+                ));
                 workers.push(generate_framework_static_worker_def(slug, &app.status));
             }
             _ => {}
@@ -239,16 +234,22 @@ fn generate_framework_entry_worker_def(slug: &str, _status: &str) -> String {
     )
 }
 
-fn generate_framework_ssr_worker_def(slug: &str, _status: &str, env_vars: &serde_json::Value) -> String {
+fn generate_framework_ssr_worker_def(
+    slug: &str,
+    _status: &str,
+    env_vars: &serde_json::Value,
+) -> String {
     let camel = ssr_camel(slug);
 
-    let mut bindings = String::from("    (name = \"ASSETS\", service = \"static-{}\"),\n".replace("{}", slug));
+    let mut bindings =
+        String::from("    (name = \"ASSETS\", service = \"static-{}\"),\n".replace("{}", slug));
     if let Some(obj) = env_vars.as_object() {
         for (key, value) in obj {
             if let Some(str_val) = value.as_str() {
                 bindings.push_str(&format!(
                     "    (name = \"{}\", string = \"{}\"),\n",
-                    key, str_val.replace('"', "\\\"")
+                    key,
+                    str_val.replace('"', "\\\"")
                 ));
             }
         }
@@ -265,7 +266,10 @@ fn generate_framework_ssr_worker_def(slug: &str, _status: &str, env_vars: &serde
 {}
   ],
 );"#,
-        camel, slug, slug, bindings.trim_end()
+        camel,
+        slug,
+        slug,
+        bindings.trim_end()
     )
 }
 

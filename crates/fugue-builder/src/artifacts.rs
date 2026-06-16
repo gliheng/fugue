@@ -17,7 +17,7 @@ pub fn generate_artifacts(task: &BuildTask) -> Result<PathBuf> {
     let workerd_dir = config::workerd_dir();
 
     match task.framework {
-        Framework::Worker => {
+        Framework::Worker | Framework::Hono => {
             generate_worker_artifacts(&task.app_slug, &task.source_path, &workerd_dir)
         }
         Framework::NuxtJs => {

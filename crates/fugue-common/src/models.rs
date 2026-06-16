@@ -23,6 +23,8 @@ pub enum Framework {
     ReactRouter,
     #[serde(rename = "vite")]
     Vite,
+    #[serde(rename = "hono")]
+    Hono,
 }
 
 impl Framework {
@@ -32,6 +34,7 @@ impl Framework {
             Framework::NuxtJs => "nuxtjs",
             Framework::ReactRouter => "react-router",
             Framework::Vite => "vite",
+            Framework::Hono => "hono",
         }
     }
 
@@ -41,6 +44,7 @@ impl Framework {
             "nuxtjs" => Some(Framework::NuxtJs),
             "react-router" => Some(Framework::ReactRouter),
             "vite" => Some(Framework::Vite),
+            "hono" => Some(Framework::Hono),
             _ => None,
         }
     }

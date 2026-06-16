@@ -1,7 +1,7 @@
 use crate::config::PlatformConfig;
 use crate::db::models::App;
-use fugue_common::error::{FugueError, Result};
 use crate::process::{config_gen, health};
+use fugue_common::error::{FugueError, Result};
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::Instant;
@@ -69,10 +69,7 @@ impl ProcessManager {
         self.wait_for_healthy(std::time::Duration::from_secs(10))
             .await?;
 
-        tracing::info!(
-            "workerd process started on port {}",
-            self.workerd_port
-        );
+        tracing::info!("workerd process started on port {}", self.workerd_port);
 
         Ok(())
     }
@@ -112,9 +109,11 @@ impl ProcessManager {
 
     pub async fn stop(&mut self) -> Result<()> {
         if let Some(mut managed) = self.process.take() {
-            managed.child.kill().await.map_err(|e| {
-                FugueError::ProcessError(format!("Failed to kill workerd: {}", e))
-            })?;
+            managed
+                .child
+                .kill()
+                .await
+                .map_err(|e| FugueError::ProcessError(format!("Failed to kill workerd: {}", e)))?;
             tracing::info!("workerd process stopped");
         }
         Ok(())
@@ -148,9 +147,7 @@ impl ProcessManager {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| {
-                FugueError::ProcessError(format!("Failed to spawn workerd: {}", e))
-            })?;
+            .map_err(|e| FugueError::ProcessError(format!("Failed to spawn workerd: {}", e)))?;
 
         if let Some(stderr) = child.stderr.take() {
             tokio::spawn(async move {

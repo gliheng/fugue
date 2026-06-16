@@ -124,6 +124,19 @@ The deploy command:
 4. Generates a 3-service workerd Cap'n Proto config
 5. Stores artifacts in `~/.fugue/workerd/<name>/`
 
+### Hono Applications
+
+A Hono project with a `src/index.ts` entry point can be deployed by adding `fugue.toml`:
+
+```toml
+framework = "hono"
+
+[build]
+command = "npx esbuild src/index.ts --bundle --format=esm --outfile=worker.js --external:cloudflare:workers --conditions=workerd --platform=browser"
+```
+
+See `examples/hono-app/` for a complete template.
+
 ## Project Status
 
 **Phase 1 (Complete)**: Basic infrastructure
@@ -143,6 +156,7 @@ The deploy command:
 | `examples/hello.js` | Single-file Cloudflare Workers function |
 | `examples/nuxtjs-simple/` | Minimal Nuxt 3 app |
 | `examples/nuxtjs-app/` | Full Nuxt app with Nuxt UI, Tailwind, pages |
+| `examples/hono-app/` | Hono app on Cloudflare Workers |
 
 ## Performance
 

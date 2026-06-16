@@ -25,14 +25,21 @@ pub async fn create_app(
     }
 
     if models::Framework::from_str(&req.framework).is_none() {
-        return Err(ApiError(fugue_common::error::FugueError::ValidationError(format!(
-            "Invalid framework '{}'. Must be one of: worker, nuxtjs, react-router, vite",
-            req.framework
-        ))));
+        return Err(ApiError(fugue_common::error::FugueError::ValidationError(
+            format!(
+                "Invalid framework '{}'. Must be one of: worker, nuxtjs, react-router, vite, hono",
+                req.framework
+            ),
+        )));
     }
 
-    let app = crud::create_app(&state.db, &req.name, &req.framework, req.description.as_deref())
-        .await?;
+    let app = crud::create_app(
+        &state.db,
+        &req.name,
+        &req.framework,
+        req.description.as_deref(),
+    )
+    .await?;
 
     Ok((axum::http::StatusCode::CREATED, Json(app)))
 }

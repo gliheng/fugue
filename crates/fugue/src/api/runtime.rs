@@ -14,16 +14,18 @@ pub async fn start_app(
     let app = crud::get_app(&state.db, id).await?;
 
     if app.status == "running" {
-        return Err(ApiError(fugue_common::error::FugueError::AppAlreadyRunning(
-            app.name.clone(),
-        )));
+        return Err(ApiError(
+            fugue_common::error::FugueError::AppAlreadyRunning(app.name.clone()),
+        ));
     }
 
     if app.status != "deploying" && app.status != "stopped" && app.status != "created" {
-        return Err(ApiError(fugue_common::error::FugueError::ValidationError(format!(
-            "Cannot start app in '{}' status. App must be deployed first.",
-            app.status
-        ))));
+        return Err(ApiError(fugue_common::error::FugueError::ValidationError(
+            format!(
+                "Cannot start app in '{}' status. App must be deployed first.",
+                app.status
+            ),
+        )));
     }
 
     // Update status

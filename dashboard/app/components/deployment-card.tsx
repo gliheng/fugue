@@ -9,6 +9,7 @@ const frameworkIcons: Record<string, string> = {
   nuxtjs: "lucide:nuxt",
   vite: "lucide:zap",
   "worker": "lucide:file-code",
+  hono: "lucide:flame",
 };
 
 export function DeploymentCard({ app }: { app: App }) {

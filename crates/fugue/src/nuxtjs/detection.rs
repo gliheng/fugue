@@ -122,10 +122,7 @@ pub fn validate_build_output(project_dir: &Path) -> Result<()> {
         )));
     }
 
-    let server_entry = config
-        .server_entry
-        .as_deref()
-        .unwrap_or("server/index.mjs");
+    let server_entry = config.server_entry.as_deref().unwrap_or("server/index.mjs");
     let index_file = output_dir.join(server_entry);
     if !index_file.exists() {
         return Err(FugueError::BuildError(format!(
@@ -157,8 +154,7 @@ mod tests {
         let dir = std::env::temp_dir().join("fugue-test-nuxt-validate-output");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join(".output/server")).unwrap();
-        std::fs::write(dir.join(".output/server/index.mjs"), "export default {};")
-            .unwrap();
+        std::fs::write(dir.join(".output/server/index.mjs"), "export default {};").unwrap();
         std::fs::write(dir.join("fugue.toml"), "framework = \"nuxtjs\"\n").unwrap();
 
         validate_build_output(&dir).expect("validation should pass for default Nuxt output");

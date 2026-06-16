@@ -1,23 +1,27 @@
 use crate::api::{ApiError, AppState};
 use crate::db::crud;
-use fugue_common::models;
-use fugue_common::project_config::ProjectConfig;
 use axum::{
     extract::{Path, State, WebSocketUpgrade},
     response::IntoResponse,
     Json,
 };
+use fugue_common::models;
+use fugue_common::project_config::ProjectConfig;
 use std::path::Path as StdPath;
 use uuid::Uuid;
 
-const SUPPORTED_FRAMEWORKS: &[&str] = &["worker", "nuxtjs", "react-router", "vite"];
+const SUPPORTED_FRAMEWORKS: &[&str] = &["worker", "nuxtjs", "react-router", "vite", "hono"];
 
-async fn maybe_update_framework(db: &sqlx::PgPool, app: &crate::db::models::App, source_dir: &StdPath) -> Result<String, fugue_common::error::FugueError> {
+async fn maybe_update_framework(
+    db: &sqlx::PgPool,
+    app: &crate::db::models::App,
+    source_dir: &StdPath,
+) -> Result<String, fugue_common::error::FugueError> {
     let config = ProjectConfig::load(source_dir)?;
     let configured = config.framework.unwrap_or_else(|| "worker".to_string());
     if !SUPPORTED_FRAMEWORKS.contains(&configured.as_str()) {
         return Err(fugue_common::error::FugueError::ValidationError(format!(
-            "Unsupported framework '{}' in fugue.toml. Supported: worker, nuxtjs, react-router, vite",
+            "Unsupported framework '{}' in fugue.toml. Supported: worker, nuxtjs, react-router, vite, hono",
             configured
         )));
     }
@@ -47,7 +51,17 @@ pub async fn trigger_deploy(
     let build = crud::create_build(&state.db, app.id).await?;
 
     // Update app status to building
-    crud::update_app(&state.db, app.id, None, None, None, Some("building"), None, None).await?;
+    crud::update_app(
+        &state.db,
+        app.id,
+        None,
+        None,
+        None,
+        Some("building"),
+        None,
+        None,
+    )
+    .await?;
 
     // Publish build task to NATS
     let task = fugue_common::models::BuildTask {
@@ -62,8 +76,14 @@ pub async fn trigger_deploy(
 
     if let Some(nats) = &state.nats {
         let payload = serde_json::to_vec(&task)?;
-        nats.publish("fugue.build.requests", payload.into()).await
-            .map_err(|e| fugue_common::error::FugueError::NatsError(format!("Failed to publish build task: {}", e)))?;
+        nats.publish("fugue.build.requests", payload.into())
+            .await
+            .map_err(|e| {
+                fugue_common::error::FugueError::NatsError(format!(
+                    "Failed to publish build task: {}",
+                    e
+                ))
+            })?;
         tracing::info!("Published build task {} to NATS", build.id);
     } else {
         // Fallback to in-process build if NATS not available
@@ -77,9 +97,10 @@ pub async fn trigger_deploy(
         let app_slug = app.slug.clone();
 
         tokio::spawn(async move {
-            let result =
-                run_build(&db, &config, &process, app_id, build_id, &framework, &app_name, &app_slug)
-                    .await;
+            let result = run_build(
+                &db, &config, &process, app_id, build_id, &framework, &app_name, &app_slug,
+            )
+            .await;
 
             match result {
                 Ok(_) => {
@@ -87,25 +108,11 @@ pub async fn trigger_deploy(
                 }
                 Err(e) => {
                     tracing::error!("Build {} failed: {:?}", build_id, e);
-                    let _ = crud::update_build(
-                        &db,
-                        build_id,
-                        "failed",
-                        None,
-                        Some(&e.to_string()),
-                    )
-                    .await;
-                    let _ = crud::update_app(
-                        &db,
-                        app_id,
-                        None,
-                        None,
-                        None,
-                        Some("error"),
-                        None,
-                        None,
-                    )
-                    .await;
+                    let _ = crud::update_build(&db, build_id, "failed", None, Some(&e.to_string()))
+                        .await;
+                    let _ =
+                        crud::update_app(&db, app_id, None, None, None, Some("error"), None, None)
+                            .await;
                 }
             }
         });
@@ -120,7 +127,9 @@ pub async fn deploy_app(
     Json(_req): Json<models::DeployRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     let app = crud::get_app(&state.db, id).await?;
-    let source_path = crate::config::apps_data_dir().join(id.to_string()).join("source");
+    let source_path = crate::config::apps_data_dir()
+        .join(id.to_string())
+        .join("source");
     let build_id = trigger_deploy(&state, &app, source_path).await?;
 
     Ok(Json(serde_json::json!({
@@ -141,7 +150,9 @@ pub async fn redeploy_app(
         )));
     }
 
-    let source_path = crate::config::apps_data_dir().join(id.to_string()).join("source");
+    let source_path = crate::config::apps_data_dir()
+        .join(id.to_string())
+        .join("source");
     let build_id = trigger_deploy(&state, &app, source_path).await?;
 
     Ok(Json(serde_json::json!({
@@ -191,20 +202,12 @@ async fn run_build(
     tracing::info!("Build completed in {}ms", build_result.build_time_ms);
 
     match framework {
-        "worker" => {
-            crate::runtime::generate_worker_workerd_artifacts(
-                app_slug,
-                &source_dir,
-                &workerd_dir,
-            )?;
+        "worker" | "hono" => {
+            crate::runtime::generate_worker_workerd_artifacts(app_slug, &source_dir, &workerd_dir)?;
         }
         "nuxtjs" => {
             crate::nuxtjs::validate_build_output(&source_dir)?;
-            crate::runtime::generate_nuxtjs_workerd_artifacts(
-                app_slug,
-                &source_dir,
-                &workerd_dir,
-            )?;
+            crate::runtime::generate_nuxtjs_workerd_artifacts(app_slug, &source_dir, &workerd_dir)?;
         }
         "react-router" => {
             crate::reactrouter::validate_build_output(&source_dir)?;
@@ -216,11 +219,7 @@ async fn run_build(
         }
         "vite" => {
             crate::vite::validate_build_output(&source_dir)?;
-            crate::runtime::generate_vite_workerd_artifacts(
-                app_slug,
-                &source_dir,
-                &workerd_dir,
-            )?;
+            crate::runtime::generate_vite_workerd_artifacts(app_slug, &source_dir, &workerd_dir)?;
         }
         _ => {
             return Err(fugue_common::error::FugueError::ValidationError(format!(
@@ -271,20 +270,13 @@ pub async fn build_logs_ws(
     Path((app_id, build_id)): Path<(Uuid, Uuid)>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| {
-        stream_build_logs(socket, state.db, app_id, build_id)
-    })
+    ws.on_upgrade(move |socket| stream_build_logs(socket, state.db, app_id, build_id))
 }
 
 use axum::extract::ws::{Message, WebSocket};
 use std::time::Duration;
 
-async fn stream_build_logs(
-    mut socket: WebSocket,
-    db: sqlx::PgPool,
-    _app_id: Uuid,
-    build_id: Uuid,
-) {
+async fn stream_build_logs(mut socket: WebSocket, db: sqlx::PgPool, _app_id: Uuid, build_id: Uuid) {
     tracing::info!("WebSocket connected for build logs: {}", build_id);
 
     let mut last_offset = 0usize;

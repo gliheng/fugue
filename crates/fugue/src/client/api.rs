@@ -133,8 +133,7 @@ impl DaemonClient {
 
         let form = reqwest::multipart::Form::new().part(
             "file",
-            reqwest::multipart::Part::bytes(file_content)
-                .file_name(file_name),
+            reqwest::multipart::Part::bytes(file_content).file_name(file_name),
         );
 
         let response = self
@@ -224,17 +223,13 @@ impl DaemonClient {
     }
 }
 
-fn create_zip_from_dir(
-    dir: &std::path::Path,
-    zip_path: &std::path::Path,
-) -> Result<()> {
+fn create_zip_from_dir(dir: &std::path::Path, zip_path: &std::path::Path) -> Result<()> {
     use zip::write::SimpleFileOptions;
 
     let zip_file = std::fs::File::create(zip_path)?;
     let mut zip = zip::ZipWriter::new(zip_file);
 
-    let options = SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
     let walker = walkdir::WalkDir::new(dir)
         .follow_links(true)
@@ -245,9 +240,8 @@ fn create_zip_from_dir(
         });
 
     for entry in walker {
-        let entry = entry.map_err(|e| {
-            FugueError::Other(format!("Failed to walk directory: {}", e))
-        })?;
+        let entry =
+            entry.map_err(|e| FugueError::Other(format!("Failed to walk directory: {}", e)))?;
 
         let path = entry.path();
         let relative = path.strip_prefix(dir).unwrap_or(path);

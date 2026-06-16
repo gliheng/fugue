@@ -16,6 +16,7 @@ const FRAMEWORK_TEMPLATES = [
   { id: "vite-react", name: "Vite React", icon: "lucide:zap", desc: "Vite SPA with React and Worker API routes" },
   { id: "vite-vue", name: "Vite Vue", icon: "lucide:triangle", desc: "Vite SPA with Vue and Worker API routes" },
   { id: "worker", name: "Worker", icon: "lucide:file-code", desc: "Simple Cloudflare Worker" },
+  { id: "hono", name: "Hono", icon: "lucide:flame", desc: "Hono app on Cloudflare Workers" },
 ];
 
 const FRAMEWORK_ICONS: Record<string, string> = {
@@ -25,6 +26,7 @@ const FRAMEWORK_ICONS: Record<string, string> = {
   "vite-react": "lucide:zap",
   "vite-vue": "lucide:triangle",
   worker: "lucide:file-code",
+  hono: "lucide:flame",
 };
 
 export default function WorkspaceList() {

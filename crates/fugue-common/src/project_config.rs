@@ -43,7 +43,7 @@ impl ProjectConfig {
 
         if !config_path.exists() {
             return Err(FugueError::ConfigError(format!(
-                "{} not found. Create one and set `framework` to one of: worker, nuxtjs, react-router, vite",
+                "{} not found. Create one and set `framework` to one of: worker, nuxtjs, react-router, vite, hono",
                 CONFIG_FILENAME
             )));
         }
@@ -58,7 +58,7 @@ impl ProjectConfig {
 
         let framework = raw.framework.as_deref().ok_or_else(|| {
             FugueError::ConfigError(format!(
-                "`framework` is required in {} (e.g., framework = \"react-router\")",
+                "`framework` is required in {} (e.g., framework = \"hono\")",
                 CONFIG_FILENAME
             ))
         })?;
@@ -124,6 +124,15 @@ impl ProjectConfig {
                 assets_prefix: String::new(),
                 build_output_dir: "dist".to_string(),
                 server_entry: Some("vite_app/index.js".to_string()),
+                install_command: None,
+                build_command: None,
+            },
+            "hono" => Self {
+                framework,
+                assets_dir: "public".to_string(),
+                assets_prefix: String::new(),
+                build_output_dir: ".".to_string(),
+                server_entry: None,
                 install_command: None,
                 build_command: None,
             },
@@ -231,6 +240,18 @@ mod tests {
     }
 
     #[test]
+    fn test_hono_defaults() {
+        let cfg = ProjectConfig::for_framework("hono");
+        assert_eq!(cfg.framework, Some("hono".to_string()));
+        assert_eq!(cfg.assets_dir, "public");
+        assert_eq!(cfg.assets_prefix, "");
+        assert_eq!(cfg.build_output_dir, ".");
+        assert_eq!(cfg.server_entry, None);
+        assert_eq!(cfg.install_command, None);
+        assert_eq!(cfg.build_command, None);
+    }
+
+    #[test]
     fn test_unknown_framework_uses_worker_defaults() {
         let cfg = ProjectConfig::for_framework("unknown");
         assert_eq!(cfg.framework, Some("unknown".to_string()));
@@ -309,7 +330,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
-        std::fs::write(dir.join("fugue.toml"), "framework = \"react-router\"\n[build]\noutput_dir = \"dist\"\n").unwrap();
+        std::fs::write(
+            dir.join("fugue.toml"),
+            "framework = \"react-router\"\n[build]\noutput_dir = \"dist\"\n",
+        )
+        .unwrap();
 
         let cfg = ProjectConfig::load(&dir).unwrap();
         assert_eq!(cfg.assets_dir, "build/client");
@@ -368,7 +393,10 @@ mod tests {
         .unwrap();
 
         let cfg = ProjectConfig::load(&dir).unwrap();
-        assert_eq!(cfg.install_command, Some("pnpm install --frozen-lockfile".to_string()));
+        assert_eq!(
+            cfg.install_command,
+            Some("pnpm install --frozen-lockfile".to_string())
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

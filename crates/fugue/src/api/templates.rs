@@ -51,6 +51,12 @@ pub async fn list_templates() -> impl IntoResponse {
             framework: "vite".to_string(),
             description: "Vite SPA with Vue and Cloudflare Worker API routes".to_string(),
         },
+        TemplateInfo {
+            id: "hono".to_string(),
+            name: "Hono".to_string(),
+            framework: "hono".to_string(),
+            description: "Hono application on Cloudflare Workers".to_string(),
+        },
     ];
     Json(templates)
 }
@@ -93,6 +99,7 @@ pub async fn get_template(
             "Vite Vue",
             "Vite SPA with Vue and Cloudflare Worker API routes",
         ),
+        "hono" => ("Hono", "Hono application on Cloudflare Workers"),
         _ => ("Unknown", "Unknown template"),
     };
 

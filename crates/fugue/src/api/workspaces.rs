@@ -53,7 +53,7 @@ pub async fn create_workspace(
         other => {
             if models::Framework::from_str(other).is_none() {
                 return Err(ApiError(fugue_common::error::FugueError::ValidationError(format!(
-                    "Invalid framework '{}'. Must be one of: worker, nuxtjs, react-router, vite, vite-react, vite-vue",
+                    "Invalid framework '{}'. Must be one of: worker, nuxtjs, react-router, vite, vite-react, vite-vue, hono",
                     req.framework
                 ))));
             }
@@ -61,7 +61,10 @@ pub async fn create_workspace(
         }
     };
 
-    let name = req.name.unwrap_or_else(|| crud::generate_workspace_name());
+    let name = match req.name {
+        Some(name) => name,
+        None => crud::generate_unique_workspace_name(&state.db).await?,
+    };
 
     // Create workspace record first (file_count = 0)
     let workspace = crud::create_workspace(&state.db, &name, framework, 0).await?;

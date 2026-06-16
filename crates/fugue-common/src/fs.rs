@@ -28,10 +28,7 @@ pub fn find_esbuild() -> Result<PathBuf> {
         return Ok(local);
     }
 
-    if let Ok(output) = Command::new("npx")
-        .args(["esbuild", "--version"])
-        .output()
-    {
+    if let Ok(output) = Command::new("npx").args(["esbuild", "--version"]).output() {
         if output.status.success() {
             return Ok(PathBuf::from("npx"));
         }

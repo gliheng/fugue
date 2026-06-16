@@ -28,13 +28,8 @@ async fn main() {
 
 async fn run(cli: Cli) -> fugue_common::error::Result<()> {
     match cli.command {
-        Commands::Start { db_url, port } => {
-            commands::start_platform(db_url.as_deref(), port).await
-        }
-        Commands::Stop => {
-            println!("Stop command: use Ctrl+C to stop the foreground process");
-            Ok(())
-        }
+        Commands::Start { db_url, port } => commands::start_platform(db_url.as_deref(), port).await,
+        Commands::Stop => commands::stop_platform().await,
         Commands::Status => {
             let config = config::PlatformConfig::load()?;
             let client = client::DaemonClient::new_with_port(config.workerd.port);
@@ -57,7 +52,9 @@ async fn run(cli: Cli) -> fugue_common::error::Result<()> {
         } => {
             let config = config::PlatformConfig::load()?;
             let client = client::DaemonClient::new_with_port(config.workerd.port);
-            let app = client.create_app(&name, &framework, description.as_deref()).await?;
+            let app = client
+                .create_app(&name, &framework, description.as_deref())
+                .await?;
             println!("App created:");
             println!("  ID: {}", app.id);
             println!("  Name: {}", app.name);

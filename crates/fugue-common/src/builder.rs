@@ -11,7 +11,11 @@ pub struct BuildResult {
     pub build_time_ms: u128,
 }
 
-pub fn build_project(source_dir: &Path, framework: &str, skip_install: bool) -> Result<BuildResult> {
+pub fn build_project(
+    source_dir: &Path,
+    framework: &str,
+    skip_install: bool,
+) -> Result<BuildResult> {
     let start_time = std::time::Instant::now();
     let pm = PackageManager::detect(source_dir);
     let config = ProjectConfig::load(source_dir)?;
@@ -31,6 +35,7 @@ pub fn build_project(source_dir: &Path, framework: &str, skip_install: bool) -> 
     // Build
     match framework {
         "worker" => build_worker(source_dir, &config)?,
+        "hono" => build_hono(source_dir, &config)?,
         "nuxtjs" => build_framework(source_dir, &config, &pm, framework)?,
         "react-router" => build_framework(source_dir, &config, &pm, framework)?,
         "vite" => build_framework(source_dir, &config, &pm, framework)?,
@@ -69,6 +74,18 @@ fn build_worker(source_dir: &Path, config: &ProjectConfig) -> Result<()> {
     }
 }
 
+fn build_hono(source_dir: &Path, config: &ProjectConfig) -> Result<()> {
+    match &config.build_command {
+        Some(build_cmd) => {
+            info!("Building Hono project with command: {}", build_cmd);
+            run_shell_command(build_cmd, source_dir)
+        }
+        None => Err(FugueError::BuildError(
+            "Hono projects require build.command in fugue.toml".to_string(),
+        )),
+    }
+}
+
 fn build_framework(
     source_dir: &Path,
     config: &ProjectConfig,
@@ -87,7 +104,7 @@ fn validate_and_measure_output(
     config: &ProjectConfig,
 ) -> Result<u64> {
     match framework {
-        "worker" => {
+        "worker" | "hono" => {
             let worker_js = source_dir.join("worker.js");
             if !worker_js.exists() {
                 return Err(FugueError::BuildError(
@@ -118,10 +135,7 @@ fn run_shell_command(cmd: &str, cwd: &Path) -> Result<()> {
         .map_err(|e| FugueError::BuildError(format!("Failed to run '{}': {}", cmd, e)))?;
 
     if !status.success() {
-        return Err(FugueError::BuildError(format!(
-            "Command failed: {}",
-            cmd
-        )));
+        return Err(FugueError::BuildError(format!("Command failed: {}", cmd)));
     }
 
     Ok(())

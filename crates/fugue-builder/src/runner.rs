@@ -7,6 +7,10 @@ pub async fn build_worker(task: &BuildTask) -> Result<(u64, u128)> {
     build_and_report(task, "worker").await
 }
 
+pub async fn build_hono(task: &BuildTask) -> Result<(u64, u128)> {
+    build_and_report(task, "hono").await
+}
+
 pub async fn build_nuxtjs(task: &BuildTask) -> Result<(u64, u128)> {
     build_and_report(task, "nuxtjs").await
 }
@@ -20,16 +24,11 @@ pub async fn build_vite(task: &BuildTask) -> Result<(u64, u128)> {
 }
 
 async fn build_and_report(task: &BuildTask, framework: &str) -> Result<(u64, u128)> {
-    let result = build_project(&task.source_path,
-        framework,
-        task.skip_install,
-    )?;
+    let result = build_project(&task.source_path, framework, task.skip_install)?;
 
     info!(
         "{} build completed in {}ms, output size: {} bytes",
-        framework,
-        result.build_time_ms,
-        result.output_size
+        framework, result.build_time_ms, result.output_size
     );
 
     Ok((result.output_size, result.build_time_ms))

@@ -37,8 +37,8 @@ pub fn detect_reactrouter_project(project_dir: &Path) -> Result<ReactRouterProje
         .unwrap_or("unknown")
         .to_string();
 
-    let has_wrangler = project_dir.join("wrangler.jsonc").exists()
-        || project_dir.join("wrangler.json").exists();
+    let has_wrangler =
+        project_dir.join("wrangler.jsonc").exists() || project_dir.join("wrangler.json").exists();
 
     if !has_wrangler {
         return Err(FugueError::NotReactRouterProject(
@@ -76,10 +76,7 @@ pub fn validate_build_output(project_dir: &Path) -> Result<()> {
         )));
     }
 
-    let server_entry = config
-        .server_entry
-        .as_deref()
-        .unwrap_or("server/index.js");
+    let server_entry = config.server_entry.as_deref().unwrap_or("server/index.js");
     let index_file = build_dir.join(server_entry);
     if !index_file.exists() {
         return Err(FugueError::BuildError(format!(
@@ -100,11 +97,11 @@ mod tests {
         let dir = std::env::temp_dir().join("fugue-test-reactrouter-validate-output");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("build/server")).unwrap();
-        std::fs::write(dir.join("build/server/index.js"), "export default {};")
-            .unwrap();
+        std::fs::write(dir.join("build/server/index.js"), "export default {};").unwrap();
         std::fs::write(dir.join("fugue.toml"), "framework = \"react-router\"\n").unwrap();
 
-        validate_build_output(&dir).expect("validation should pass for default React Router output");
+        validate_build_output(&dir)
+            .expect("validation should pass for default React Router output");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

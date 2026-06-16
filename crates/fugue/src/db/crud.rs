@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use fugue_common::models::*;
-use fugue_common::error::{FugueError, Result};
 use chrono::Utc;
+use fugue_common::error::{FugueError, Result};
+use fugue_common::models::*;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -35,7 +35,16 @@ pub async fn create_app(
     .await
     .map_err(|e| match e {
         sqlx::Error::Database(db_err) if db_err.constraint().is_some() => {
-            FugueError::AppAlreadyExists(name.to_string())
+            let constraint = db_err.constraint().unwrap_or("");
+            if constraint.contains("slug") || constraint.contains("subdomain") {
+                FugueError::AppAlreadyExists(name.to_string())
+            } else {
+                FugueError::ValidationError(format!(
+                    "Invalid app data (constraint '{}'): {}",
+                    constraint,
+                    db_err.message()
+                ))
+            }
         }
         _ => FugueError::DatabaseError(format!("Failed to create app: {}", e)),
     })?;
@@ -276,11 +285,7 @@ pub async fn create_deployment(pool: &PgPool, app_id: Uuid, build_id: Uuid) -> R
     Ok(deployment)
 }
 
-pub async fn update_deployment_status(
-    pool: &PgPool,
-    id: Uuid,
-    status: &str,
-) -> Result<Deployment> {
+pub async fn update_deployment_status(pool: &PgPool, id: Uuid, status: &str) -> Result<Deployment> {
     let now = Utc::now();
 
     let deployment = sqlx::query_as::<_, Deployment>(
@@ -342,21 +347,19 @@ pub fn slugify(name: &str) -> String {
 }
 
 const ADJECTIVES: &[&str] = &[
-    "eager", "bold", "swift", "quiet", "crimson", "golden", "silver",
-    "ancient", "cosmic", "brave", "gentle", "fierce", "lively", "rapid",
-    "serene", "vivid", "nimble", "sturdy", "keen", "wild", "bright",
-    "calm", "dark", "deep", "ethereal", "frosty", "grand", "hidden",
-    "iron", "jade", "lucid", "mystic", "neon", "oberon", "proud",
-    "rare", "sage", "teal", "vast", "warm", "xeric", "yielding", "zesty",
+    "eager", "bold", "swift", "quiet", "crimson", "golden", "silver", "ancient", "cosmic", "brave",
+    "gentle", "fierce", "lively", "rapid", "serene", "vivid", "nimble", "sturdy", "keen", "wild",
+    "bright", "calm", "dark", "deep", "ethereal", "frosty", "grand", "hidden", "iron", "jade",
+    "lucid", "mystic", "neon", "oberon", "proud", "rare", "sage", "teal", "vast", "warm", "xeric",
+    "yielding", "zesty",
 ];
 
 const NOUNS: &[&str] = &[
-    "panda", "thunder", "river", "falcon", "ocelot", "glacier", "prism",
-    "taiga", "aurora", "badger", "coyote", "drift", "ember", "fjord",
-    "gorse", "heron", "impala", "jade", "kite", "lynx", "marmot",
-    "narwhal", "orca", "pika", "quartz", "raven", "stoat", "tundra",
-    "urchin", "viper", "wren", "xerus", "yak", "zebra", "bison",
-    "cedar", "dune", "elm", "fox", "grove", "hare", "iris",
+    "panda", "thunder", "river", "falcon", "ocelot", "glacier", "prism", "taiga", "aurora",
+    "badger", "coyote", "drift", "ember", "fjord", "gorse", "heron", "impala", "jade", "kite",
+    "lynx", "marmot", "narwhal", "orca", "pika", "quartz", "raven", "stoat", "tundra", "urchin",
+    "viper", "wren", "xerus", "yak", "zebra", "bison", "cedar", "dune", "elm", "fox", "grove",
+    "hare", "iris",
 ];
 
 pub fn generate_workspace_name() -> String {
@@ -368,6 +371,27 @@ pub fn generate_workspace_name() -> String {
     let adj_idx = seed % ADJECTIVES.len();
     let noun_idx = (seed / ADJECTIVES.len()) % NOUNS.len();
     format!("{}-{}", ADJECTIVES[adj_idx], NOUNS[noun_idx])
+}
+
+pub async fn generate_unique_workspace_name(pool: &PgPool) -> Result<String> {
+    for _ in 0..10 {
+        let name = generate_workspace_name();
+        let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM workspaces WHERE name = $1")
+            .bind(&name)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| {
+                FugueError::DatabaseError(format!("Failed to check workspace name: {}", e))
+            })?;
+        if exists.0 == 0 {
+            return Ok(name);
+        }
+    }
+
+    // Fallback: append a short UUID fragment to guarantee uniqueness.
+    let suffix = Uuid::new_v4().to_string();
+    let short = suffix.split('-').next().unwrap_or(&suffix);
+    Ok(format!("{}-{}", generate_workspace_name(), short))
 }
 
 pub async fn create_workspace(
@@ -395,7 +419,16 @@ pub async fn create_workspace(
     .await
     .map_err(|e| match e {
         sqlx::Error::Database(db_err) if db_err.constraint().is_some() => {
-            FugueError::DatabaseError(format!("Workspace name '{}' already exists", name))
+            let constraint = db_err.constraint().unwrap_or("");
+            if constraint.contains("name") {
+                FugueError::DatabaseError(format!("Workspace name '{}' already exists", name))
+            } else {
+                FugueError::ValidationError(format!(
+                    "Invalid workspace data (constraint '{}'): {}",
+                    constraint,
+                    db_err.message()
+                ))
+            }
         }
         _ => FugueError::DatabaseError(format!("Failed to create workspace: {}", e)),
     })?;

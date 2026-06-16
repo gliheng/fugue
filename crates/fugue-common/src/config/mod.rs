@@ -82,9 +82,8 @@ impl PlatformConfig {
                 FugueError::ConfigError(format!("Failed to read config file: {}", e))
             })?;
 
-            toml::from_str(&content).map_err(|e| {
-                FugueError::ConfigError(format!("Failed to parse config file: {}", e))
-            })
+            toml::from_str(&content)
+                .map_err(|e| FugueError::ConfigError(format!("Failed to parse config file: {}", e)))
         } else {
             Ok(Self::default())
         }
@@ -96,9 +95,8 @@ impl PlatformConfig {
             std::fs::create_dir_all(parent)?;
         }
 
-        let content = toml::to_string_pretty(self).map_err(|e| {
-            FugueError::ConfigError(format!("Failed to serialize config: {}", e))
-        })?;
+        let content = toml::to_string_pretty(self)
+            .map_err(|e| FugueError::ConfigError(format!("Failed to serialize config: {}", e)))?;
 
         std::fs::write(&config_path, content)?;
         Ok(())
@@ -135,4 +133,8 @@ pub fn apps_data_dir() -> PathBuf {
 
 pub fn workspaces_data_dir() -> PathBuf {
     data_dir().join("workspaces")
+}
+
+pub fn pid_path() -> PathBuf {
+    fugue_dir().join("fugue.pid")
 }

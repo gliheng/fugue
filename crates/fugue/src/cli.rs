@@ -32,7 +32,7 @@ pub enum Commands {
         /// App name
         name: String,
 
-        /// Framework: worker, nuxtjs, react-router, vite
+        /// Framework: worker, nuxtjs, react-router, vite, hono
         #[arg(short, long, default_value = "worker")]
         framework: String,
 

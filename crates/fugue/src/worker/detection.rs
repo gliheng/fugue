@@ -31,7 +31,13 @@ pub fn detect_worker_project(project_dir: &Path) -> Result<WorkerProjectInfo> {
         }
         found.unwrap_or_else(|| "src/index.ts".to_string())
     } else {
-        let candidates = ["index.ts", "index.js", "index.mjs", "worker.ts", "worker.js"];
+        let candidates = [
+            "index.ts",
+            "index.js",
+            "index.mjs",
+            "worker.ts",
+            "worker.js",
+        ];
         let mut found = None;
         for candidate in &candidates {
             let path = project_dir.join(candidate);

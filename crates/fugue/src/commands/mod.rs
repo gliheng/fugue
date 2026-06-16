@@ -1,10 +1,13 @@
 use crate::config::PlatformConfig;
 use crate::db::{crud, init_pool};
-use fugue_common::error::{FugueError, Result};
 use crate::process::ProcessManager;
 use axum::response::IntoResponse;
+use fugue_common::error::{FugueError, Result};
 use futures_util::StreamExt;
+use nix::sys::signal::{self, Signal};
+use nix::unistd::Pid;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 
 pub async fn start_platform(db_url: Option<&str>, port: u16) -> Result<()> {
@@ -21,13 +24,20 @@ pub async fn start_platform(db_url: Option<&str>, port: u16) -> Result<()> {
 
     config.save()?;
 
+    write_pid_file(std::process::id() as i32)?;
+
     init_tracing(&config.logging.level);
 
     tracing::info!("Starting Fugue platform v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("Database: {}", mask_db_url(&config.database.url));
     tracing::info!("API: {}:{}", config.platform.host, config.platform.port);
     tracing::info!("Domain: {}", config.platform.domain);
-    tracing::info!("Workerd: http://{}.{}:{}", "<app>", config.platform.domain, config.workerd.port);
+    tracing::info!(
+        "Workerd: http://{}.{}:{}",
+        "<app>",
+        config.platform.domain,
+        config.workerd.port
+    );
 
     let db = init_pool(&config.database.url).await?;
     tracing::info!("Connected to PostgreSQL");
@@ -39,7 +49,10 @@ pub async fn start_platform(db_url: Option<&str>, port: u16) -> Result<()> {
             Some(client)
         }
         Err(e) => {
-            tracing::warn!("Failed to connect to NATS: {}. Builds will run in-process.", e);
+            tracing::warn!(
+                "Failed to connect to NATS: {}. Builds will run in-process.",
+                e
+            );
             None
         }
     };
@@ -103,11 +116,85 @@ pub async fn start_platform(db_url: Option<&str>, port: u16) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("Listening on {}", addr);
 
-    axum::serve(listener, app).await.map_err(|e| {
-        FugueError::ProcessError(format!("Server error: {}", e))
-    })?;
+    axum::serve(listener, app)
+        .await
+        .map_err(|e| FugueError::ProcessError(format!("Server error: {}", e)))?;
 
     Ok(())
+}
+
+pub async fn stop_platform() -> Result<()> {
+    let pid_path = crate::config::pid_path();
+
+    if !pid_path.exists() {
+        println!("Fugue platform is not running (no PID file found)");
+        return Ok(());
+    }
+
+    let pid_str = std::fs::read_to_string(&pid_path)?;
+    let pid: i32 = pid_str.trim().parse().map_err(|e| {
+        FugueError::ProcessError(format!("Invalid PID in {}: {}", pid_path.display(), e))
+    })?;
+
+    if !is_process_alive(pid) {
+        println!("Removing stale PID file for process {}", pid);
+        std::fs::remove_file(&pid_path)?;
+        return Ok(());
+    }
+
+    if pid == std::process::id() as i32 {
+        return Err(FugueError::ProcessError(
+            "Cannot stop the platform from within itself".to_string(),
+        ));
+    }
+
+    println!("Stopping Fugue platform (PID {})...", pid);
+    signal::kill(Pid::from_raw(pid), Signal::SIGTERM).map_err(|e| {
+        FugueError::ProcessError(format!("Failed to send SIGTERM to platform process: {}", e))
+    })?;
+
+    // Wait up to 10 seconds for the process to exit
+    let timeout = Duration::from_secs(10);
+    let start = std::time::Instant::now();
+    while start.elapsed() < timeout {
+        if !is_process_alive(pid) {
+            std::fs::remove_file(&pid_path)?;
+            println!("Fugue platform stopped");
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    // If still alive, send SIGKILL
+    println!("Platform did not stop gracefully, forcing shutdown...");
+    signal::kill(Pid::from_raw(pid), Signal::SIGKILL).map_err(|e| {
+        FugueError::ProcessError(format!("Failed to send SIGKILL to platform process: {}", e))
+    })?;
+
+    let kill_timeout = Duration::from_secs(5);
+    let start = std::time::Instant::now();
+    while start.elapsed() < kill_timeout {
+        if !is_process_alive(pid) {
+            std::fs::remove_file(&pid_path)?;
+            println!("Fugue platform stopped");
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    Err(FugueError::ProcessError(
+        "Platform process did not terminate".to_string(),
+    ))
+}
+
+fn write_pid_file(pid: i32) -> Result<()> {
+    let pid_path = crate::config::pid_path();
+    std::fs::write(&pid_path, format!("{}\n", pid))?;
+    Ok(())
+}
+
+fn is_process_alive(pid: i32) -> bool {
+    signal::kill(Pid::from_raw(pid), None).is_ok()
 }
 
 async fn listen_build_results(
@@ -134,7 +221,11 @@ async fn listen_build_results(
             }
         };
 
-        tracing::info!("Received build result for {}: success={}", result.build_id, result.success);
+        tracing::info!(
+            "Received build result for {}: success={}",
+            result.build_id,
+            result.success
+        );
 
         let status = if result.success { "success" } else { "failed" };
         let error_msg = result.error.as_deref();
@@ -148,7 +239,9 @@ async fn listen_build_results(
             );
         }
 
-        if let Err(e) = crate::db::crud::update_build(&db, result.build_id, status, None, error_msg).await {
+        if let Err(e) =
+            crate::db::crud::update_build(&db, result.build_id, status, None, error_msg).await
+        {
             tracing::error!("Failed to update build status: {}", e);
             continue;
         }
@@ -156,8 +249,17 @@ async fn listen_build_results(
         if result.success {
             // Mark app as deploying while we regenerate the workerd config
             if let Err(e) = crate::db::crud::update_app(
-                &db, result.app_id, None, None, None, Some("deploying"), None, None,
-            ).await {
+                &db,
+                result.app_id,
+                None,
+                None,
+                None,
+                Some("deploying"),
+                None,
+                None,
+            )
+            .await
+            {
                 tracing::error!("Failed to update app status to deploying: {}", e);
             }
 
@@ -172,16 +274,34 @@ async fn listen_build_results(
                 match pm.reload(&running_apps).await {
                     Ok(_) => {
                         if let Err(e) = crate::db::crud::update_app(
-                            &db, result.app_id, None, None, None, Some("running"), None, None,
-                        ).await {
+                            &db,
+                            result.app_id,
+                            None,
+                            None,
+                            None,
+                            Some("running"),
+                            None,
+                            None,
+                        )
+                        .await
+                        {
                             tracing::error!("Failed to update app status to running: {}", e);
                         }
                     }
                     Err(e) => {
                         tracing::error!("Failed to reload workerd: {}", e);
                         if let Err(e) = crate::db::crud::update_app(
-                            &db, result.app_id, None, None, None, Some("error"), None, None,
-                        ).await {
+                            &db,
+                            result.app_id,
+                            None,
+                            None,
+                            None,
+                            Some("error"),
+                            None,
+                            None,
+                        )
+                        .await
+                        {
                             tracing::error!("Failed to update app status to error: {}", e);
                         }
                     }
@@ -189,15 +309,33 @@ async fn listen_build_results(
             } else {
                 tracing::error!("Failed to list apps for workerd reload");
                 if let Err(e) = crate::db::crud::update_app(
-                    &db, result.app_id, None, None, None, Some("error"), None, None,
-                ).await {
+                    &db,
+                    result.app_id,
+                    None,
+                    None,
+                    None,
+                    Some("error"),
+                    None,
+                    None,
+                )
+                .await
+                {
                     tracing::error!("Failed to update app status to error: {}", e);
                 }
             }
         } else {
             if let Err(e) = crate::db::crud::update_app(
-                &db, result.app_id, None, None, None, Some("error"), None, None,
-            ).await {
+                &db,
+                result.app_id,
+                None,
+                None,
+                None,
+                Some("error"),
+                None,
+                None,
+            )
+            .await
+            {
                 tracing::error!("Failed to update app status: {}", e);
             }
         }
@@ -224,13 +362,11 @@ async fn persist_build_logs(nats: async_nats::Client, db: sqlx::PgPool) {
             }
         };
 
-        if let Err(e) = sqlx::query(
-            "UPDATE builds SET log = COALESCE(log, '') || $1 WHERE id = $2"
-        )
-        .bind(format!("{}\n", log.line))
-        .bind(log.build_id)
-        .execute(&db)
-        .await
+        if let Err(e) = sqlx::query("UPDATE builds SET log = COALESCE(log, '') || $1 WHERE id = $2")
+            .bind(format!("{}\n", log.line))
+            .bind(log.build_id)
+            .execute(&db)
+            .await
         {
             tracing::error!("Failed to persist build log: {}", e);
         }

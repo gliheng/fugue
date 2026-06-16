@@ -1,0 +1,8 @@
+framework = "hono"
+
+[assets]
+dir = "public"
+prefix = ""
+
+[build]
+command = "npx esbuild src/index.ts --bundle --format=esm --outfile=worker.js --external:cloudflare:workers --conditions=workerd --platform=browser"

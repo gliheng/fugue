@@ -1,9 +1,9 @@
-mod runner;
 mod artifacts;
+mod runner;
 
-use fugue_common::models::{BuildTask, BuildResult, BuildLog, LogStream, Framework};
+use fugue_common::models::{BuildLog, BuildResult, BuildTask, Framework, LogStream};
 use futures_util::StreamExt;
-use tracing::{info, error};
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -15,8 +15,8 @@ async fn main() -> anyhow::Result<()> {
         .with_target(false)
         .init();
 
-    let nats_url = std::env::var("NATS_URL")
-        .unwrap_or_else(|_| "nats://localhost:4222".to_string());
+    let nats_url =
+        std::env::var("NATS_URL").unwrap_or_else(|_| "nats://localhost:4222".to_string());
 
     info!("Connecting to NATS at {}", nats_url);
     let client = async_nats::connect(&nats_url).await?;
@@ -37,7 +37,10 @@ async fn main() -> anyhow::Result<()> {
             }
         };
 
-        info!("Received build task: {} for app {}", task.build_id, task.app_id);
+        info!(
+            "Received build task: {} for app {}",
+            task.build_id, task.app_id
+        );
 
         let client = client.clone();
         tokio::spawn(async move {
@@ -55,6 +58,7 @@ async fn execute_build(client: &async_nats::Client, task: BuildTask) -> anyhow::
 
     let result = match task.framework {
         Framework::Worker => runner::build_worker(&task).await,
+        Framework::Hono => runner::build_hono(&task).await,
         Framework::NuxtJs => runner::build_nuxtjs(&task).await,
         Framework::ReactRouter => runner::build_reactrouter(&task).await,
         Framework::Vite => runner::build_vite(&task).await,
@@ -66,7 +70,13 @@ async fn execute_build(client: &async_nats::Client, task: BuildTask) -> anyhow::
 
             match artifacts::generate_artifacts(&task) {
                 Ok(artifacts_path) => {
-                    publish_log(client, &task.build_id, "Artifacts generated", LogStream::System).await;
+                    publish_log(
+                        client,
+                        &task.build_id,
+                        "Artifacts generated",
+                        LogStream::System,
+                    )
+                    .await;
                     BuildResult {
                         build_id: task.build_id,
                         app_id: task.app_id,
@@ -116,14 +126,22 @@ async fn execute_build(client: &async_nats::Client, task: BuildTask) -> anyhow::
     Ok(())
 }
 
-async fn publish_log(client: &async_nats::Client, build_id: &uuid::Uuid, line: &str, stream: LogStream) {
+async fn publish_log(
+    client: &async_nats::Client,
+    build_id: &uuid::Uuid,
+    line: &str,
+    stream: LogStream,
+) {
     let log = BuildLog {
         build_id: *build_id,
         line: line.to_string(),
         stream,
     };
     let subject = format!("fugue.build.logs.{}", build_id);
-    if let Err(e) = client.publish(subject, serde_json::to_vec(&log).unwrap().into()).await {
+    if let Err(e) = client
+        .publish(subject, serde_json::to_vec(&log).unwrap().into())
+        .await
+    {
         error!("Failed to publish log: {}", e);
     }
 }

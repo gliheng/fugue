@@ -13,6 +13,7 @@ const FRAMEWORK_TEMPLATES = [
   { id: "nuxtjs", name: "Nuxt.js", icon: "lucide:hexagon", desc: "Full-stack Nuxt.js with SSR" },
   { id: "vite", name: "Vite", icon: "lucide:zap", desc: "Vite SPA with Worker API routes" },
   { id: "worker", name: "Worker", icon: "lucide:file-code", desc: "Simple Cloudflare Worker" },
+  { id: "hono", name: "Hono", icon: "lucide:flame", desc: "Hono app on Cloudflare Workers" },
 ];
 
 export function meta({ params }: Route.MetaArgs) {
